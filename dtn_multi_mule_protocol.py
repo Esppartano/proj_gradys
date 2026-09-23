@@ -16,18 +16,18 @@ class DTNMultiMuleProtocol(BaseFANETProtocol):
     BASE_POINT: Position = (2.0, 0.0, 15.0)
     DEST_POINT: Position = (115.0, 0.0, 15.0)
 
-    # Cores RGB vibrantes (Three.js 0-255)
-    COLOR_BASE_IDLE = (30, 144, 255)          # Azul vibrante (Base P)
-    COLOR_BASE_SUCCESS = (0, 230, 115)        # Verde esmeralda brilhante
-    COLOR_MULE_Q_IDLE = (180, 180, 180)       # Cinza metálico (Mula Q)
-    COLOR_MULE_R_IDLE = (147, 112, 219)       # Púrpura/Médio (Mula R)
-    COLOR_CARRY_DATA = (255, 140, 0)          # Laranja vibrante (Transportando Dados)
-    COLOR_LOITER_RENDEZVOUS = (255, 215, 0)   # Dourado (Handshake no Rendezvous)
-    COLOR_CARRY_ACK = (0, 210, 255)           # Ciano vibrante (Transportando ACK)
-    COLOR_DEST_WAITING = (220, 20, 60)        # Vermelho carmesim (Destino)
-    COLOR_DEST_RECEIVED = (50, 205, 50)       # Verde vivo
-    COLOR_SPARSE_NODE = (140, 140, 150)       # Cinza ardósia (Nós isolados S e T)
-    COLOR_FINISHED = (50, 205, 50)            # Verde vivo de conclusão
+    # Cores RGB de Alto Contraste (Three.js 0-255)
+    COLOR_BASE_IDLE = (20, 60, 220)          # Azul Royal Profundo (Base P)
+    COLOR_BASE_SUCCESS = (0, 255, 80)        # Verde Limão Neon (Concluído)
+    COLOR_MULE_Q_IDLE = (220, 225, 230)      # Branco Metálico Claro (Mula Q)
+    COLOR_MULE_R_IDLE = (160, 32, 240)       # Roxo / Púrpura Vibrante (Mula R)
+    COLOR_CARRY_DATA = (255, 120, 0)         # Laranja Solar Vivo (Transportando Dados)
+    COLOR_LOITER_RENDEZVOUS = (255, 230, 0)  # Amarelo Ouro / Neon (Handshake no Rendezvous)
+    COLOR_CARRY_ACK = (0, 255, 255)          # Ciano Elétrico Puro (Transportando ACK)
+    COLOR_DEST_WAITING = (255, 20, 50)       # Vermelho Intenso (Destino)
+    COLOR_DEST_RECEIVED = (0, 255, 80)       # Verde Limão Neon
+    COLOR_SPARSE_NODE = (80, 80, 90)         # Grafite Neutro (Nós isolados S e T)
+    COLOR_FINISHED = (0, 255, 80)            # Verde Limão Neon de conclusão
 
     def __init__(self):
         super().__init__()

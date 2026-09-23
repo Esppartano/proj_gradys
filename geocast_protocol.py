@@ -19,16 +19,16 @@ class GeoCastProtocol(BaseFANETProtocol):
     BASE_POS: Position = (0.0, 0.0, 15.0)
     GEO_RADIUS: float = 35.0  # Raio de entrega da Delivery Zone
 
-    # Paleta de Cores RGB (Three.js 0-255)
-    COLOR_BASE_IDLE = (30, 144, 255)            # Azul vibrante (Base)
-    COLOR_BASE_SUCCESS = (0, 230, 115)          # Verde esmeralda (Concluído)
-    COLOR_ROUTER_IDLE = (180, 180, 180)         # Cinza metálico
-    COLOR_ROUTER_FWD_DATA = (255, 140, 0)       # Laranja (Na Forwarding Zone -> Encaminhando)
-    COLOR_ROUTER_PRUNED = (120, 120, 130)       # Cinza ardósia escuro (Poda Geográfica aplicada)
-    COLOR_ROUTER_FWD_ACK = (0, 210, 255)        # Ciano (Retorno de ACK na zona)
-    COLOR_TARGET_WAITING = (220, 20, 60)        # Vermelho carmesim (Alvo aguardando)
-    COLOR_TARGET_RECEIVED = (50, 205, 50)       # Verde vivo (Alvo recebeu pacote)
-    COLOR_FINISHED = (50, 205, 50)              # Verde vivo
+    # Paleta de Cores RGB de Alto Contraste (Three.js 0-255)
+    COLOR_BASE_IDLE = (20, 60, 220)             # Azul Royal Profundo (Base no solo)
+    COLOR_BASE_SUCCESS = (0, 255, 80)           # Verde Limão Neon (Concluído)
+    COLOR_ROUTER_IDLE = (220, 225, 230)         # Branco Metálico Claro (Roteador em espera/patrulha)
+    COLOR_ROUTER_FWD_DATA = (255, 120, 0)       # Laranja Solar Vivo (Na Forwarding Zone -> Encaminhando)
+    COLOR_ROUTER_PRUNED = (70, 70, 80)          # Grafite Escuro / Apagado (Poda Geográfica aplicada)
+    COLOR_ROUTER_FWD_ACK = (0, 255, 255)        # Ciano Elétrico Puro (Retorno de ACK na zona)
+    COLOR_TARGET_WAITING = (255, 20, 50)        # Vermelho Intenso (Alvo aguardando)
+    COLOR_TARGET_RECEIVED = (0, 255, 80)        # Verde Limão Neon (Alvo recebeu pacote)
+    COLOR_FINISHED = (0, 255, 80)               # Verde Limão Neon
 
     def __init__(self):
         super().__init__()

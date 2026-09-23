@@ -15,16 +15,16 @@ class DTNProtocol(BaseFANETProtocol):
     WAYPOINT_TARGET: Position = (115.0, 0.0, 15.0)
     WAYPOINT_BASE: Position = (10.0, 0.0, 15.0)
 
-    # Cores RGB vibrantes (escala 0-255 para Three.js / Web Visualizer)
-    COLOR_BASE_IDLE = (30, 144, 255)       # Azul vibrante (DodgerBlue)
-    COLOR_BASE_SUCCESS = (0, 230, 115)     # Verde esmeralda brilhante
-    COLOR_MULE_IDLE = (180, 180, 180)      # Cinza metálico neutro
-    COLOR_MULE_CARRY_DATA = (255, 140, 0)  # Laranja brilhante
-    COLOR_MULE_LOITER = (255, 215, 0)      # Dourado/Amarelo (Hover/Handshake)
-    COLOR_MULE_CARRY_ACK = (0, 210, 255)   # Ciano vibrante
-    COLOR_MULE_SUCCESS = (50, 205, 50)     # Verde vivo
-    COLOR_TARGET_WAITING = (220, 20, 60)   # Vermelho carmesim
-    COLOR_TARGET_RECEIVED = (50, 205, 50)  # Verde vivo
+    # Cores RGB de Alto Contraste (Three.js 0-255)
+    COLOR_BASE_IDLE = (20, 60, 220)        # Azul Royal Profundo (Base no solo)
+    COLOR_BASE_SUCCESS = (0, 255, 80)      # Verde Limão Neon (Concluído)
+    COLOR_MULE_IDLE = (220, 225, 230)      # Branco Metálico Claro (Mula em espera)
+    COLOR_MULE_CARRY_DATA = (255, 120, 0)  # Laranja Solar Vivo (Transportando Dados)
+    COLOR_MULE_LOITER = (255, 230, 0)      # Amarelo Ouro / Neon (Hover/Handshake)
+    COLOR_MULE_CARRY_ACK = (0, 255, 255)   # Ciano Elétrico Puro (Transportando ACK)
+    COLOR_MULE_SUCCESS = (0, 255, 80)      # Verde Limão Neon
+    COLOR_TARGET_WAITING = (255, 20, 50)   # Vermelho Intenso (Alvo aguardando)
+    COLOR_TARGET_RECEIVED = (0, 255, 80)   # Verde Limão Neon (Alvo recebeu pacote)
 
     def __init__(self):
         super().__init__()

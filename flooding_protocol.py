@@ -14,16 +14,16 @@ class FloodingProtocol(BaseFANETProtocol):
     (broadcast storm) em comparação ao GeoCast e DTN.
     """
 
-    # Paleta de Cores RGB (Three.js 0-255)
-    COLOR_BASE_IDLE = (30, 144, 255)        # Azul vibrante (Base)
-    COLOR_BASE_SUCCESS = (0, 230, 115)      # Verde esmeralda (Concluído)
-    COLOR_ROUTER_IDLE = (180, 180, 180)     # Cinza metálico (Roteador em espera)
-    COLOR_ROUTER_DATA = (255, 140, 0)       # Laranja vibrante (Inundando Dados)
-    COLOR_ROUTER_EXTRANEOUS = (220, 100, 0) # Laranja escuro (Ramo redundante/inútil)
-    COLOR_ROUTER_ACK = (0, 210, 255)        # Ciano vibrante (Inundando ACK)
-    COLOR_TARGET_WAITING = (220, 20, 60)    # Vermelho carmesim (Alvo aguardando)
-    COLOR_TARGET_RECEIVED = (50, 205, 50)   # Verde vivo (Alvo recebeu pacote)
-    COLOR_FINISHED = (50, 205, 50)          # Verde vivo
+    # Paleta de Cores RGB de Alto Contraste (Three.js 0-255)
+    COLOR_BASE_IDLE = (20, 60, 220)         # Azul Royal Profundo (Base no solo)
+    COLOR_BASE_SUCCESS = (0, 255, 80)       # Verde Limão Neon (Concluído)
+    COLOR_ROUTER_IDLE = (220, 225, 230)     # Branco Metálico Claro (Roteador em espera)
+    COLOR_ROUTER_DATA = (255, 120, 0)       # Laranja Solar Vivo (Inundando Dados na Rota Útil)
+    COLOR_ROUTER_EXTRANEOUS = (220, 20, 220)# Magenta / Roxo Choque (Ramo Redundante / Overhead)
+    COLOR_ROUTER_ACK = (0, 255, 255)        # Ciano Elétrico Puro (Inundando ACK)
+    COLOR_TARGET_WAITING = (255, 20, 50)    # Vermelho Intenso (Alvo aguardando)
+    COLOR_TARGET_RECEIVED = (0, 255, 80)    # Verde Limão Neon (Alvo recebeu pacote)
+    COLOR_FINISHED = (0, 255, 80)           # Verde Limão Neon
 
     def __init__(self):
         super().__init__()
