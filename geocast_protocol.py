@@ -143,6 +143,7 @@ class GeoCastProtocol(BaseFANETProtocol):
 
         # ----------------- ALVO (Nó 4) DISPARO DE ACK -----------------
         elif timer == "send_ack" and my_id == 4:
+            orig_time = getattr(self, "orig_data_creation_time", now)
             ack = Packet(
                 packet_id="ACK_GEO_01",
                 packet_type=PacketType.ACK.value,
@@ -151,7 +152,7 @@ class GeoCastProtocol(BaseFANETProtocol):
                 content="ACK_OK_GEOCAST",
                 dest_pos=self.BASE_POS,
                 ttl=4,
-                creation_time=now,
+                creation_time=orig_time,
                 hop_count=0
             )
             self.seen_packets.add(ack.packet_id)
@@ -199,6 +200,7 @@ class GeoCastProtocol(BaseFANETProtocol):
                     self.log(f"GEOCAST SUCESSO: Alvo 4 recebeu '{pkt.content}' em {METRICS.delivery_latency:.2f}s (Saltos: {METRICS.hops})!")
 
                     # Agenda difusão de ACK após 1.0s
+                    self.orig_data_creation_time = pkt.creation_time
                     self.provider.schedule_timer("send_ack", now + 1.0)
 
                 # Base (Nó 0) recebe confirmação do ACK

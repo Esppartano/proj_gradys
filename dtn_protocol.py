@@ -144,7 +144,7 @@ class DTNProtocol(BaseFANETProtocol):
                         destination=0,
                         content="ACK_MISSAO_CONFIRMADA",
                         ttl=10,
-                        creation_time=now,
+                        creation_time=pkt.creation_time,
                         hop_count=0
                     )
                     self.seen_packets.add(ack.packet_id)

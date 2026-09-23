@@ -186,14 +186,21 @@ flowchart TD
 
 ## 4. Quadro Comparativo Quantitativo dos Baselines
 
-Resultados oficiais coletados via benchmark automatizado (`python main.py 5`):
+Resultados oficiais coletados via benchmark automatizado (`python main.py 5`) com medição de **RTT Fim-a-Fim Real** (padrão *Timestamp Echo* / RFC 7323) e rastreamento de **Overhead de Rádio**:
 
-| Protocolo Avaliado | Topologia / Nós | PDR (%) | Latência | RTT (s) | Transm. Rádio | Característica Teórica Validada |
-| :--- | :---: | :---: | :---: | :---: | :---: | :--- |
-| **DTN Tradicional (1 Mula)** | 3 nós (Partição) | **100.0%** | $8.52\text{ s}$ | $11.02\text{ s}$ | 4 | Transporte físico com alta latência sobre gap desconexo. |
-| **DTN Multi-Mula (Arsheen)** | 6 nós (Rendezvous) | **100.0%** | $10.70\text{ s}$ | $12.94\text{ s}$ | 7 | Cadeia cooperativa com encontro central e nós periféricos. |
-| **Controlled Flooding (Lim & Kim)** | 5 nós (Malha) | **100.0%** | $1.02\text{ s}$ | $1.02\text{ s}$ | **9** | Difusão cega em multissalto com overhead em ramos cegos. |
-| **GeoCast (Choi et al.)** | 5 nós (Malha) | **100.0%** | $1.02\text{ s}$ | $1.02\text{ s}$ | **5** | Poda direcional (Forwarding Zone) cortando ramos inúteis. |
+| Protocolo Avaliado | Topologia / Nós | PDR (%) | Latência (Ida) | RTT Real (Ida+Volta) | Transm. Totais | Transm. Redundantes (Overhead) | Característica Teórica Validada |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
+| **DTN Tradicional (1 Mula)** | 3 nós (Partição) | **100.0%** | $8.52\text{ s}$ | $19.54\text{ s}$ | 4 | 0 (0.0%) | Transporte físico sobre gap desconexo (Ida 8.52s + Loiter 2.5s + Volta 8.52s). |
+| **DTN Multi-Mula (Arsheen)** | 6 nós (Rendezvous) | **100.0%** | $10.70\text{ s}$ | $23.64\text{ s}$ | 7 | 0 (0.0%) | Cadeia cooperativa com encontro central e nós periféricos isolados. |
+| **Controlled Flooding (Lim & Kim)** | 5 nós (Malha) | **100.0%** | $1.02\text{ s}$ | $3.04\text{ s}$ | **9** | **4 (44.4%)** | Difusão cega em multissalto: 4 transmissões redundantes no ramo Sul (*Broadcast Storm*). |
+| **GeoCast (Choi et al.)** | 5 nós (Malha) | **100.0%** | $1.02\text{ s}$ | $3.04\text{ s}$ | **5** | **0 (0.0%)** | Poda geográfica em voo (*Forwarding Zone*): **Redução de 44.4% no uso de espectro/bateria**. |
+
+### Análise Comparativa Crítica: Flooding vs. GeoCast
+1. **Por que a Latência de Ida e o RTT deram idênticos ($1.02\text{s}$ e $3.04\text{s}$)?**
+   * Em condições de canal limpo (sem colisão destrutiva por saturação no meio físico), ambos os protocolos encontram e utilizam o **menor caminho físico** (Rota Norte: Base $\to$ Relé 1 $\to$ Alvo 4).
+   * O propósito científico do GeoCast na literatura não é ser mais rápido que o Flooding em canal desobstruído, mas sim **prevenir o esgotamento do meio de transmissão** e a drenagem prematura da bateria dos UAVs.
+2. **Onde está a Superioridade do GeoCast?**
+   * **No consumo do espectro de rádio e economia de energia:** Enquanto o Flooding forçou os Drones 2 e 3 (setor Sul) a transmitirem 4 pacotes totalmente inúteis para a missão, o GeoCast realizou a **poda direcional dinâmica** no ar via GPS, alcançando **44.4% de economia** de transmissões.
 
 ---
 
