@@ -73,7 +73,9 @@ flowchart TD
         M1_tgt -- "Voo de Retorno até x=10" --> M1_base["Mula na Base (x=10)"]
         M1_base -- "Entrega ACK (t=22.5s)" --> A0
     end
-
+```
+```mermaid
+flowchart TD
     subgraph S1B["Cenário 1B: DTN Multi-Mula (Arsheen)"]
         P0["Base P (0)"] -- "CMD (t=3.0s)" --> Q1["Mula Q (1)"]
         Q1 -- "Voo ao Centro (x=55)" --> RV["Rendezvous (x=55)"]
@@ -84,7 +86,9 @@ flowchart TD
         RV_ACK -- "Handshake & Loiter (2.0s)" --> Q1
         Q1 -- "Voo de volta à Base" --> P0_ACK["Base P (0)"]
     end
-
+```
+```mermaid
+flowchart TD
     subgraph S23["Cenários 2 e 3: Malha Ramificada (Flooding vs GeoCast)"]
         direction LR
         B["Base (0)"] -->|Rota Norte| N1["Norte (1)"]
