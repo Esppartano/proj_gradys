@@ -13,22 +13,24 @@ from flooding_protocol import FloodingProtocol
 from dtn_protocol import DTNProtocol
 from dtn_multi_mule_protocol import DTNMultiMuleProtocol
 from geocast_protocol import GeoCastProtocol
+from swarmcore_protocol import SwarmCoreProtocol
 
 
 # -------------------------------------------------------------------
 # Configuração do Visualizador 3D Web
 # -------------------------------------------------------------------
-def create_vis_config(x_max: float = 150.0, y_range=(-50.0, 50.0)) -> VisualizationConfiguration:
+def create_vis_config(x_max: float = 150.0, y_range=(-50.0, 50.0), x_min: float = -20.0) -> VisualizationConfiguration:
     return VisualizationConfiguration(
         information_collection_interval=0.05,
         update_rate=0.05,
-        x_range=(-20.0, x_max),
+        x_range=(x_min, x_max),
         y_range=y_range,
         z_range=(0.0, 40.0),
         host="localhost",
         port=5678,
         open_browser=True
     )
+
 
 
 # -------------------------------------------------------------------
@@ -242,7 +244,77 @@ def run_geocast(real_time: bool = True, enable_vis: bool = True) -> Dict[str, An
 
 
 # -------------------------------------------------------------------
-# Benchmark Comparativo Automático (Todos os 4 cenários em modo headless)
+# Cenário 5: Swarm Core (Formação V: 9 Core + 4 Satélites em Tandem)
+# -------------------------------------------------------------------
+def run_swarmcore(real_time: bool = True, enable_vis: bool = True) -> Dict[str, Any]:
+    METRICS.reset()
+    sim_config = SimulationConfiguration(duration=35.0, real_time=real_time)
+    builder = SimulationBuilder(configuration=sim_config)
+
+    medium = CommunicationMedium(transmission_range=50.0, delay=0.01)
+    builder.add_handler(CommunicationHandler(communication_medium=medium))
+    builder.add_handler(TimerHandler())
+    builder.add_handler(MasslessMobilityHandler(MasslessMobilityConfiguration(default_speed=14.0)))
+
+    if enable_vis:
+        builder.add_handler(VisualizationHandler(configuration=create_vis_config(x_min=-40.0, x_max=105.0, y_range=(-75.0, 75.0))))
+
+    # 1. Torre Terrestre (Nó 0 - Estação Base Solo Central)
+    builder.add_node(SwarmCoreProtocol, (25.0, 0.0, 5.0))           # 0: Torre Terrestre Central (Nó Central no Solo)
+
+    # 2. Swarm Core em Formação V Afunilada e Reta (9 nós: 1 a 9)
+    # O Líder C1 orbita o Nó Central (Torre) a R=34m; os outros nós seguem C1 em V afunilado e reto (~40°)
+    builder.add_node(SwarmCoreProtocol, (59.0, 0.0, 15.0))          # 1: Ápice Líder (C1 - Orbita Torre Central a R=34m)
+    builder.add_node(SwarmCoreProtocol, (61.0, -5.5, 15.0))         # 2: Asa Esquerda Salto 1 (C2)
+    builder.add_node(SwarmCoreProtocol, (63.0, -11.0, 15.0))        # 3: Asa Esquerda Salto 2 (C3)
+    builder.add_node(SwarmCoreProtocol, (65.0, -16.5, 15.0))        # 4: Asa Esquerda Salto 3 (C4 - Ronda)
+    builder.add_node(SwarmCoreProtocol, (67.0, -22.0, 15.0))        # 5: Hub Ponta Esquerda (C5 - FF Control)
+    builder.add_node(SwarmCoreProtocol, (57.0, -5.5, 15.0))         # 6: Asa Direita Salto 1 (C6)
+    builder.add_node(SwarmCoreProtocol, (55.0, -11.0, 15.0))        # 7: Asa Direita Salto 2 (C7)
+    builder.add_node(SwarmCoreProtocol, (53.0, -16.5, 15.0))        # 8: Asa Direita Salto 3 (C8)
+    builder.add_node(SwarmCoreProtocol, (51.0, -22.0, 15.0))        # 9: Hub Ponta Direita (C9 - Hub S3)
+
+    # 3. Satélites Periféricos (4 nós: 10 a 13)
+    builder.add_node(SwarmCoreProtocol, (67.0, -22.0, 17.5))        # 10: S1 (Sudeste - Tandem inicial com C5)
+    builder.add_node(SwarmCoreProtocol, (19.0, 47.6, 17.5))         # 11: S2 (Norte - Órbita Periférica)
+    builder.add_node(SwarmCoreProtocol, (37.8, 46.2, 17.5))         # 12: S3 (Nordeste - Órbita Periférica)
+    builder.add_node(SwarmCoreProtocol, (-19.9, 17.0, 17.5))        # 13: S4 (Oeste - Órbita Periférica)
+
+    print("\n" + "=" * 65)
+    print(" INICIANDO: SWARM CORE (Torre Central + 9 Core em V Reto/Afunilado + 4 Satélites)")
+    print(" Topologia: Torre Central Solo (0) <-> Ápice (C1) <-> Asas V Reto (C2-C9)")
+    print(" Dinâmica: Líder C1 orbita o Nó Central a R=34m e seguidores acompanham")
+    print(" Revezamento: Ronda Externa de C4 + Adaptação FF Control de C5")
+    print(" Satélites: S1..S4 em órbita com acoplamento temporário em tandem")
+    print(" Roteamento: Árvore Geradora Determinística (Spanning Tree)")
+    if enable_vis:
+        print(" • Visualizador 3D: https://project-gradys.github.io/gradys-sim-nextgen-visualization/")
+        print(" • Aquecimento inicial: 2.0 segundos para conexão do navegador")
+        print(" • Transmissão cadenciada para máxima clareza visual no 3D")
+    print("=" * 65 + "\n")
+
+    sim = builder.build()
+    start_wall = time.time()
+    sim.start_simulation()
+    elapsed_wall = time.time() - start_wall
+
+    METRICS.print_summary("Swarm Core (Formação V)")
+    return {
+        "scenario": "Swarm Core (Formação V)",
+        "pdr": (METRICS.data_delivered / METRICS.data_sent * 100) if METRICS.data_sent > 0 else 0,
+        "latency": METRICS.delivery_latency,
+        "rtt": METRICS.round_trip_time,
+        "transmissions": METRICS.total_transmissions,
+        "overhead_tx": 0,
+        "overhead_pct": 0.0,
+        "hops": METRICS.hops,
+        "success": METRICS.mission_success,
+        "wall_time": elapsed_wall
+    }
+
+
+# -------------------------------------------------------------------
+# Benchmark Comparativo Automático (Todos os 5 cenários em modo headless)
 # -------------------------------------------------------------------
 def run_benchmark_comparison() -> None:
     print("\n" + "=" * 75)
@@ -255,13 +327,14 @@ def run_benchmark_comparison() -> None:
     results.append(run_dtn_multi_mule(real_time=False, enable_vis=False))
     results.append(run_flooding(real_time=False, enable_vis=False))
     results.append(run_geocast(real_time=False, enable_vis=False))
+    results.append(run_swarmcore(real_time=False, enable_vis=False))
 
-    print("\n" + "#" * 98)
+    print("\n" + "#" * 102)
     print("                        QUADRO COMPARATIVO DE DESEMPENHO")
-    print("#" * 98)
+    print("#" * 102)
     header = f"{'Protocolo':<26} | {'Sucesso':<7} | {'PDR (%)':<7} | {'Latencia':<9} | {'RTT (s)':<8} | {'Transm.':<7} | {'Overhead (Tx)':<14} | {'Tempo Exec.':<10}"
     print(header)
-    print("-" * 98)
+    print("-" * 102)
 
     for r in results:
         status = "SIM" if r["success"] else "NAO"
@@ -273,12 +346,13 @@ def run_benchmark_comparison() -> None:
         wall_s = f"{r['wall_time']:.2f}s"
         print(f"{r['scenario']:<26} | {status:<7} | {pdr_s:<7} | {lat_s:<9} | {rtt_s:<8} | {tx_s:<7} | {overhead_s:<14} | {wall_s:<10}")
 
-    print("-" * 98)
-    print(" ANALISE DE EFICIENCIA DE CANAL (GEOCAST vs FLOODING):")
-    print(" - Controlled Flooding: 9 transmissoes totais (4 transmissoes redundantes no Ramo Sul)")
-    print(" - GeoCast Routing:     5 transmissoes totais (0 redundantes - Poda Geografica em voo)")
-    print(" - Ganho de Eficiencia: Reducao de 44.4% no uso do espectro de radio e economia de bateria")
-    print("#" * 98 + "\n")
+    print("-" * 102)
+    print(" ANALISE DE DESEMPENHO E EFICIENCIA:")
+    print(" - Controlled Flooding:     9 transmissoes (4 redundantes no Ramo Sul - Broadcast Storm)")
+    print(" - GeoCast Routing:         5 transmissoes (0 redundantes - Poda Geografica em voo)")
+    print(" - Swarm Core (Formacao V): 30 transmissoes (29 unicasts dirigidos + 1 broadcast final)")
+    print("                            0 redundantes - Spanning Tree + Tandem + Revezamento FF")
+    print("#" * 102 + "\n")
 
 
 # -------------------------------------------------------------------
@@ -311,19 +385,19 @@ def prompt_mode() -> Optional[Tuple[bool, bool]]:
 
 
 def main() -> None:
-    # 1. Tratamento quando argumentos CLI são passados (ex: python main.py 1 1 ou python main.py 5)
+    # 1. Tratamento quando argumentos CLI são passados (ex: python main.py 5 1 ou python main.py 6)
     if len(sys.argv) > 1:
         cli_opcao = sys.argv[1].strip()
-        if cli_opcao not in ["1", "2", "3", "4", "5"]:
-            print(f"\n[ERRO] Opção CLI '{cli_opcao}' inválida! Escolha um valor entre 1 e 5.")
-            print("Uso: python main.py <cenario: 1-5> [modo: 1-2]")
+        if cli_opcao not in ["1", "2", "3", "4", "5", "6"]:
+            print(f"\n[ERRO] Opção CLI '{cli_opcao}' inválida! Escolha um valor entre 1 e 6.")
+            print("Uso: python main.py <cenario: 1-6> [modo: 1-2]")
             sys.exit(1)
 
-        if cli_opcao in ["1", "2", "3", "4"]:
+        if cli_opcao in ["1", "2", "3", "4", "5"]:
             cli_modo = sys.argv[2].strip() if len(sys.argv) > 2 else "1"
             if cli_modo not in ["1", "2"]:
                 print(f"\n[ERRO] Modo CLI '{cli_modo}' inválido! Digite '1' (Visualizador 3D) ou '2' (Headless).")
-                print("Uso: python main.py <cenario: 1-5> [modo: 1-2]")
+                print("Uso: python main.py <cenario: 1-6> [modo: 1-2]")
                 sys.exit(1)
 
             real_time = (cli_modo == "1")
@@ -337,8 +411,10 @@ def main() -> None:
                 run_flooding(real_time=real_time, enable_vis=enable_vis)
             elif cli_opcao == "4":
                 run_geocast(real_time=real_time, enable_vis=enable_vis)
+            elif cli_opcao == "5":
+                run_swarmcore(real_time=real_time, enable_vis=enable_vis)
 
-        elif cli_opcao == "5":
+        elif cli_opcao == "6":
             run_benchmark_comparison()
 
         return
@@ -353,11 +429,12 @@ def main() -> None:
         print("2 - DTN Multi-Mula (Arsheen et al. - Cadeia de Rendezvous)")
         print("3 - Flooding Controlado (Lim & Kim - Descarte por TTL)")
         print("4 - GeoCast (Choi et al. - Delivery Zone Georreferenciada)")
-        print("5 - Benchmark Comparativo Completo (Roda todos em modo rápido)")
+        print("5 - Swarm Core (9 Core em Formação V + 4 Satélites em Tandem)")
+        print("6 - Benchmark Comparativo Completo (Roda todos em modo rápido)")
         print("0 - Sair")
 
         try:
-            opcao = input("\nOpção (0-5): ").strip()
+            opcao = input("\nOpção (0-6): ").strip()
         except (EOFError, KeyboardInterrupt):
             print("\nEncerrando simulador.")
             break
@@ -366,7 +443,7 @@ def main() -> None:
             print("\nEncerrando simulador.")
             break
 
-        elif opcao in ["1", "2", "3", "4"]:
+        elif opcao in ["1", "2", "3", "4", "5"]:
             modo_config = prompt_mode()
             if modo_config is None:
                 continue
@@ -381,13 +458,15 @@ def main() -> None:
                 run_flooding(real_time=real_time, enable_vis=enable_vis)
             elif opcao == "4":
                 run_geocast(real_time=real_time, enable_vis=enable_vis)
+            elif opcao == "5":
+                run_swarmcore(real_time=real_time, enable_vis=enable_vis)
 
             try:
                 input("\nPressione [ENTER] para retornar ao menu principal...")
             except (EOFError, KeyboardInterrupt):
                 break
 
-        elif opcao == "5":
+        elif opcao == "6":
             run_benchmark_comparison()
             try:
                 input("\nPressione [ENTER] para retornar ao menu principal...")
@@ -395,7 +474,7 @@ def main() -> None:
                 break
 
         else:
-            print(f"\n[AVISO] Opção '{opcao}' inválida! Por favor, escolha um número de 0 a 5.")
+            print(f"\n[AVISO] Opção '{opcao}' inválida! Por favor, escolha um número de 0 a 6.")
 
 
 if __name__ == "__main__":

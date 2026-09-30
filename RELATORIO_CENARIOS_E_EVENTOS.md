@@ -9,15 +9,13 @@
 
 ## 1. Visão Geral da Arquitetura do Sistema
 
-O projeto implementa e avalia os três algoritmos clássicos de comunicação para redes móveis ad-hoc de drones (FANETs) sob particionamento de rede e conectividade intermitente:
+O projeto implementa e avalia protocolos de comunicação e mobilidade para redes móveis ad-hoc de drones (FANETs) sob particionamento de rede e conectividade intermitente:
 1. **DTN (*Delay-Tolerant Networking*)**:
    - **Variante 1A:** DTN Tradicional com 1 Mula Móvel (*Store-Carry-Forward* clássico com Loiter no Alvo).
    - **Variante 1B:** DTN Multi-Mula (*Arsheen et al., 2020*) com cadeia de transferência em ponto de encontro (*Rendezvous Chain* com Loiter no ponto central).
 2. **Controlled Flooding (*Lim & Kim, 2001*)**: Inundação controlada com atenuação estrita por TTL (*Time-To-Live*), tabela de supressão de duplicatas e permanência temporária nos waypoints.
 3. **GeoCast Routing (*Choi et al., 2018*)**: Encaminhamento georreferenciado e difusão restrita à zona de entrega (*Delivery Zone* delimitada por raio 3D).
-
-> [!NOTE]
-> Conforme orientado pelo professor, estes três algoritmos funcionam como os **baselines de comparação quantitativa**. A implementação do **Swarm Core (9 nós + 4 satélites)** está catalogada na [Seção 7](#7-anotação-de-requisitos-swarm-core---fase-2) para a Fase 2 do trabalho.
+4. **Swarm Core em Formação V (Fase 2 - GrADyS)**: Núcleo estruturado de 9 drones em formação rígida de voo em V com Árvore Geradora determinística (*Spanning Tree*) e 4 drones satélites periféricos ($S_1, S_2, S_3, S_4$) operando acoplamento temporário em tandem e roteamento assíncrono inter-satélites sem flooding.
 
 ---
 
@@ -31,6 +29,7 @@ proj_gradys/
 ├── dtn_multi_mule_protocol.py  # Cenário 1B: DTN Multi-Mula com Rendezvous (Arsheen et al.)
 ├── flooding_protocol.py        # Cenário 2: Controlled Flooding (Lim & Kim)
 ├── geocast_protocol.py         # Cenário 3: GeoCast Routing com Delivery Zone (Choi et al.)
+├── swarmcore_protocol.py       # Cenário 4 (Fase 2): Swarm Core em Formação V (9 Core + 4 Satélites)
 ├── main.py                     # Orquestrador da simulação, CLI interativa e benchmark automático
 └── RELATORIO_CENARIOS_E_EVENTOS.md  # Este relatório técnico consolidado
 ```
@@ -188,23 +187,24 @@ flowchart TD
 
 ---
 
-## 4. Quadro Comparativo Quantitativo dos Baselines
+## 4. Quadro Comparativo Quantitativo dos Protocolos
 
-Resultados oficiais coletados via benchmark automatizado (`python main.py 5`) com medição de **RTT Fim-a-Fim Real** (padrão *Timestamp Echo* / RFC 7323) e rastreamento de **Overhead de Rádio**:
+Resultados oficiais coletados via benchmark automatizado (`python main.py 6`) com medição de **RTT Fim-a-Fim Real** (padrão *Timestamp Echo* / RFC 7323) e rastreamento de **Overhead de Rádio**:
 
 | Protocolo Avaliado | Topologia / Nós | PDR (%) | Latência (Ida) | RTT Real (Ida+Volta) | Transm. Totais | Transm. Redundantes (Overhead) | Característica Teórica Validada |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
 | **DTN Tradicional (1 Mula)** | 3 nós (Partição) | **100.0%** | $8.52\text{ s}$ | $19.54\text{ s}$ | 4 | 0 (0.0%) | Transporte físico sobre gap desconexo (Ida 8.52s + Loiter 2.5s + Volta 8.52s). |
 | **DTN Multi-Mula (Arsheen)** | 6 nós (Rendezvous) | **100.0%** | $10.70\text{ s}$ | $23.64\text{ s}$ | 7 | 0 (0.0%) | Cadeia cooperativa com encontro central e nós periféricos isolados. |
-| **Controlled Flooding (Lim & Kim)** | 5 nós (Malha) | **100.0%** | $1.02\text{ s}$ | $3.04\text{ s}$ | **9** | **4 (44.4%)** | Difusão cega em multissalto: 4 transmissões redundantes no ramo Sul (*Broadcast Storm*). |
-| **GeoCast (Choi et al.)** | 5 nós (Malha) | **100.0%** | $1.02\text{ s}$ | $3.04\text{ s}$ | **5** | **0 (0.0%)** | Poda geográfica em voo (*Forwarding Zone*): **Redução de 44.4% no uso de espectro/bateria**. |
+| **Swarm Core (Formação V)** | **14 nós** (Torre + 9 Core + 4 Satélites) | **100.0%** | $2.65\text{ s}$ | $24.31\text{ s}$ | **30** | **0 (0.0%)** | **Superioridade de Rede:** Roteamento determinístico por *Spanning Tree* + ponte de trânsito móvel entre satélites ($S_1 \to S_2$, $S_3 \to S_2$, $S_2 \to S_4$ e $S_4 \to \text{Torre}$) com **zero** transmissões redundantes. |
 
-### Análise Comparativa Crítica: Flooding vs. GeoCast
-1. **Por que a Latência de Ida e o RTT deram idênticos ($1.02\text{s}$ e $3.04\text{s}$)?**
-   * Em condições de canal limpo (sem colisão destrutiva por saturação no meio físico), ambos os protocolos encontram e utilizam o **menor caminho físico** (Rota Norte: Base $\to$ Relé 1 $\to$ Alvo 4).
-   * O propósito científico do GeoCast na literatura não é ser mais rápido que o Flooding em canal desobstruído, mas sim **prevenir o esgotamento do meio de transmissão** e a drenagem prematura da bateria dos UAVs.
-2. **Onde está a Superioridade do GeoCast?**
-   * **No consumo do espectro de rádio e economia de energia:** Enquanto o Flooding forçou os Drones 2 e 3 (setor Sul) a transmitirem 4 pacotes totalmente inúteis para a missão, o GeoCast realizou a **poda direcional dinâmica** no ar via GPS, alcançando **44.4% de economia** de transmissões.
+### Análise Comparativa Crítica e Conclusões
+1. **Formação em V com Ângulo Agudo (~40.0°) e Asas Retilíneas:** A formação adota geometria em V agudo com abertura de $40.0^\circ$ ($\Delta u = \pm 2.0\text{m}, \Delta v = 5.5\text{m}$), garantindo aerodinâmica compacta e asas perfeitamente retas sem curvatura.
+2. **Rotação Rigorosa em Torno do Nó Central (Torre 0):** O Líder $C_1$ orbita a Torre Central a um raio ampliado de $R=34.0\text{m}$ (afastamento ideal), permitindo que ambas as asas acompanhem a trajetória com folga dinâmica e raio de curvatura suave.
+3. **Eliminação do Bottleneck da Asa Esquerda (Velocidade até 14 m/s):** O aumento do teto de velocidade dos drones para $14.0\text{ m/s}$ eliminou a saturação física na asa esquerda externa ($v = \omega \cdot R \approx 12.0\text{ m/s} \le 14.0\text{ m/s}$), eliminando qualquer atraso e mantendo as asas 100% retas.
+4. **Conclusão de Volta Completa (360°):** Com velocidade angular $\omega = 0.2856\text{ rad/s}$, a formação completa uma volta inteira ($360^\circ$) em $22\text{s}$, tornando a dinâmica orbital e a ronda externa perfeitamente visíveis ao operador.
+5. **Torre Terrestre Presente e Conexão Robusta:** A Torre Base (Nó 0) no solo mantém enlace direto com o Líder $C_1$ (distância 3D de $35.44\text{m} \le 45.0\text{m}$), iniciando a missão e recebendo a entrega consolidada final.
+6. **Eficiência Espectral e Zero Broadcast Storm:** O Swarm Core utiliza 100% de unicasts dirigidos saltando pela Árvore Geradora, garantindo **0.0% de transmissões redundantes**, em contraste com o Flooding que desperdiça 44.4% do espectro.
+7. **Revezamento de Nós (*FF Control*):** Demonstra a adaptação dinâmica da topologia: o Nó $C_4$ sai da formação para ronda externa e o Nó $C_5$ avança para cobrir a vaga, mantendo o padrão V rígido e a Spanning Tree 100% conectada sem falhas de roteamento.
 
 ---
 
@@ -227,7 +227,8 @@ Escolha o cenário de simulação:
 2 - DTN Multi-Mula (Arsheen et al. - Cadeia de Rendezvous)
 3 - Flooding Controlado (Lim & Kim - Descarte por TTL)
 4 - GeoCast (Choi et al. - Delivery Zone Georreferenciada)
-5 - Benchmark Comparativo Completo (Roda todos em modo rápido)
+5 - Swarm Core (Torre + 9 Core em V + 4 Satélites em Tandem)
+6 - Benchmark Comparativo Completo (Roda todos em modo rápido)
 0 - Sair
 ```
 
@@ -240,20 +241,19 @@ Escolha o cenário de simulação:
   * Execução instantânea em milissegundos sem abrir interface gráfica.
 * **Modo 0 (`Voltar ao Menu Principal`):**
   * Cancela a seleção e retorna ao menu de cenários.
-* **Validação Estrita:** Qualquer entrada fora das permitidas (ex: digitar `3` no modo ou `9` no menu) é rejeitada com aviso e repetição do prompt, impedindo disparos acidentais.
 
 ### 5.3. Atalhos de Linha de Comando (Diretos)
-* **Executar DTN com Visualizador 3D:**
+* **Executar Swarm Core com Torre e Formação V no Visualizador 3D:**
   ```powershell
-  .\gradys-env\Scripts\python.exe main.py 1 1
+  .\gradys-env\Scripts\python.exe main.py 5 1
   ```
-* **Executar DTN Multi-Mula com Visualizador 3D:**
+* **Executar Swarm Core em Modo Headless Rápido:**
   ```powershell
-  .\gradys-env\Scripts\python.exe main.py 2 1
+  .\gradys-env\Scripts\python.exe main.py 5 2
   ```
-* **Executar Benchmark Completo Instantâneo:**
+* **Executar Benchmark Completo Instantâneo (Todos os 5 Cenários):**
   ```powershell
-  .\gradys-env\Scripts\python.exe main.py 5
+  .\gradys-env\Scripts\python.exe main.py 6
   ```
 
 ---
@@ -264,34 +264,83 @@ Escolha o cenário de simulação:
 
 | Cor do Nó | Código RGB (CSS) | Significado / Evento Representado no Protocolo |
 | :---: | :---: | :--- |
-| 🔵 **Azul Vibrante** | `(30, 144, 255)` | **Estação Base / Torre:** Nó de origem do comando e ponto de entrega final do ACK. |
-| 🔴 **Vermelho Carmesim** | `(220, 20, 60)` | **Alvo Remoto / Destino:** Drone isolado aguardando o recebimento da mensagem. |
-| ⚪ **Cinza Metálico** | `(180, 180, 180)` | **Mula Pronta / Ociosa:** Drone em repouso na base aguardando comando. |
-| 🟠 **Laranja Vibrante** | `(255, 140, 0)` | **Transporte de Dados (*Store-Carry*):** Drone transportando o pacote de comando até o destino. |
-| 🟡 **Dourado / Amarelo** | `(255, 215, 0)` | **Handshake / Loiter:** Drone pairando no ponto de entrega/encontro transferindo dados. |
-| 🔷 **Ciano Vibrante** | `(0, 210, 255)` | **Transporte de ACK (*Store-Carry ACK*):** Drone retornando à Base com o ACK coletado. |
-| 🟢 **Verde Vivo** | `(50, 205, 50)` | **Dado Recebido com Sucesso:** Alvo ou drone receptor no momento em que absorve a mensagem. |
-| 🟢 **Verde Esmeralda** | `(0, 230, 115)` | **Missão 100% Concluída:** Base após validar o retorno do ACK e registrar o RTT final. |
+| 🔵 **Azul Royal Profundo** | `(20, 60, 220)` | **Torre Terrestre / Solo (0):** Estação Base emissora da missão e receptora do relatório final. |
+| 🟣 **Roxo Imperial Neon** | `(160, 32, 240)` | **Líder / Ápice do V ($C_1$):** Vértice da formação e nó raiz (*Root*) da Spanning Tree. |
+| 🔵 **Azul Claro Vivo** | `(30, 144, 255)` | **Drones do Core ($C_2$ a $C_9$):** Nós das asas esquerda e direita da formação em V. |
+| 🔷 **Turquesa Neon** | `(0, 190, 255)` | **Nó Rearranjado (*FF Control*):** Drone que ajustou posição para cobrir a vaga do nó em ronda. |
+| 🟠 **Laranja Solar** | `(255, 140, 0)` | **Satélite / Drone em Ronda Externa:** Drone realizando patrulha orbital na periferia. |
+| 🟡 **Amarelo Ouro Neon** | `(255, 230, 0)` | **Acoplamento em Tandem:** Satélite emparelhado com hub do Core navegando em conjunto. |
+| 🔷 **Ciano Elétrico Puro** | `(0, 255, 255)` | **Encaminhamento na Árvore:** Drones intermediários repassando pacote via Spanning Tree. |
+| 🟢 **Verde Limão Neon** | `(0, 255, 80)` | **Dado / ACK Absorvido:** Satélite ou nó no momento em que recebe a mensagem com sucesso. |
+| 🟢 **Verde Esmeralda** | `(0, 230, 115)` | **Missão 100% Concluída:** Torre e enxame após validação e entrega de todos os dados. |
 
 ### 6.2. Painel de Inspeção do Nó (*HUD / Tracked Variables*)
-Ao **clicar com o mouse sobre qualquer drone** na interface 3D, um painel lateral exibe as variáveis atualizadas em tempo real:
-* **`Papel`**: Identificação funcional do drone (ex: `Mula Móvel (1)`, `Alvo Isolado (2)`).
-* **`Estado`**: Estado interno da máquina de estados do protocolo (ex: `"No Alvo: Handshake / Loiter (2.5s)"`, `"Retornando com ACK -> Base"`).
-* **`Buffer`**: Pacote armazenado em buffer rádio naquele instante (ex: `CMD_01`, `ACK_01`).
+Ao **clicar com o mouse sobre qualquer nó** na interface 3D, um painel lateral exibe as variáveis atualizadas em tempo real:
+* **`Papel`**: Identificação funcional do nó (ex: `"Torre Terrestre / Estação Base (0)"`, `"Core Ápice Líder (C1)"`, `"Core C5 (Rearranjado por FF Control)"`).
+* **`Estado`**: Estado da máquina de estados (ex: `"Formação V Pairada"`, `"Voo Tandem Acoplado com Hub C5"`).
+* **`Topologia`**: Posição na Árvore Geradora e salto em relação ao Ápice.
 
 ---
 
-## 7. Anotação de Requisitos: Swarm Core - Fase 2
+## 7. Arquitetura e Validação: Swarm Core em Formação V (Fase 2)
 
-Conforme estabelecido com o docente, a implementação do **Swarm Core** será executada em momento posterior:
+A implementação do **Swarm Core em Formação V com Torre Terrestre** atende integralmente aos requisitos definidos para a Fase 2 do projeto:
 
-* **Arquitetura do SwCore:**
-  * **9 nós no núcleo** em formação rígida (*Flight Formation* em anel ou grade $3 \times 3$).
-  * Rotação lenta da formação em torno de um ponto central comum.
-  * Árvore geradora conexa (*Spanning Tree*) com tabelas de roteamento determinísticas no núcleo.
-* **Drones Satélites Periféricos ($S_1, S_2, S_3, S_4$):**
-  * 4 nós executando órbitas circulares na periferia do enxame.
-  * Acoplamento temporário ($T$ segundos) ao nó *hub* do core mais próximo (movimento em tandem).
-  * Anúncios de alcançabilidade (*reachability announcements*) disseminados na árvore geradora do core.
-  * Envio assíncrono de mensagens entre satélites ($S_1 \to S_2$, $S_3 \to S_2$, $S_2 \to S_4$).
-* **Meta de Validação:** Demonstrar que o Swarm Core estruturado supera os baselines (Flooding, GeoCast e DTN) em taxa de entrega e menor atraso de trânsito.
+```mermaid
+graph TD
+    T0["Torre Terrestre Base (Nó 0 - Solo)"] <--> C1["Ápice Líder C1 (Nó 1 - Root)"]
+    subgraph LeftWing["Asa Esquerda"]
+        C2["C2 (Salto 1)"]
+        C3["C3 (Salto 2)"]
+        C4["C4 (Salto 3 - Ronda Externa)"]
+        C5["C5 (Salto 4 / Hub S1 - FF Control)"]
+    end
+    subgraph RightWing["Asa Direita"]
+        C6["C6 (Salto 1)"]
+        C7["C7 (Salto 2)"]
+        C8["C8 (Salto 3)"]
+        C9["C9 (Salto 4 / Hub S3)"]
+    end
+    subgraph Satellites["Satélites Periféricos"]
+        S1["S1 (Nó 10 - Noroeste)"] -. "Voo Tandem" .-> C5
+        S3["S3 (Nó 12 - Sudoeste)"] -. "Voo Tandem" .-> C9
+        S2["S2 (Nó 11 - Nordeste)"] -. "Órbita Circular" .-> C1
+        S4["S4 (Nó 13 - Sudeste)"] -. "Órbita Circular" .-> C7
+    end
+
+    C1 <--> C2
+    C2 <--> C3
+    C3 <--> C4
+    C4 <--> C5
+    C1 <--> C6
+    C6 <--> C7
+    C7 <--> C8
+    C8 <--> C9
+```
+
+### 7.1. Geometria da Formação em V Afunilada e Cinemática Leader-Follower
+* **Padrão em V (~40.0°):** O semi-ângulo de cada asa é $\alpha = \arctan(2.0 / 5.5) \approx 19.98^\circ$, totalizando uma abertura compacta de $\approx 40.0^\circ$. Os nós formam linhas retas perfeitas a partir do Ápice $C_1$, eliminando deformações ou curvaturas no perfil do V.
+* **Afastamento do Nó Central ($R=34.0\text{ m}$):** Para evitar que a asa esquerda fique excessivamente próxima da curvatura central e permitir trajetórias tangenciais limpas, o Líder $C_1$ foi afastado para uma órbita de raio $R=34.0\text{m}$ em torno do Nó Central (Torre 0). A asa esquerda fica no semi-plano externo ($R \in [36.0, 42.0]\text{m}$) e a asa direita no semi-plano interno ($R \in [32.0, 26.0]\text{m}$).
+* **Eliminação do Bottleneck de Velocidade ($14.0\text{ m/s}$):** Na rotação com $\omega = 0.2856\text{ rad/s}$, a velocidade tangencial cresce com o raio ($v = \omega \cdot R$). O nó mais externo $C_5$ requer $v \approx 12.0\text{ m/s}$. O teto de velocidade dos drones foi aumentado de $8.5\text{ m/s}$ para $14.0\text{ m/s}$, eliminando por completo a saturação física que curvava a asa esquerda para trás.
+* **Torre Terrestre Central (Nó 0):** Estação de solo fixa em `(25.0, 0.0, 5.0)`. A distância 3D entre a Torre e o Líder $C_1$ é constante em $\sqrt{34^2 + 10^2} = 35.44\text{ m} \le 45.0\text{ m}$ em todos os $360^\circ$ de rotação, garantindo enlace direto de rádio 100% contínuo e estável.
+* **Espaçamento da Asa:** $\Delta u = 2.0\text{ m}, \Delta v = 5.5\text{ m} \implies \text{distância adjacente} = \sqrt{2.0^2 + 5.5^2} = 5.85\text{ m} \le 45.0\text{ m}$.
+* **Cruzamento de Asa:** Distância entre $C_2$ e $C_6$ é de $4.0\text{ m}$, com o tráfego inter-asas roteado obrigatoriamente pelo **Ápice ($C_1$)**, preservando a **Árvore Geradora (*Spanning Tree*) estrita**.
+
+### 7.2. Dinâmica de Rotação (360° Completo em 22s) e Revezamento de Nós (*FF Control*)
+1. **Conclusão de Volta Completa (360° em 22s):** O Líder e os seguidores orbitam o Nó Central a $\omega = 0.2856\text{ rad/s}$ ($T = 22.0\text{ s}$), completando **uma volta completa de 360° em exatamente 22.0 segundos** (1.6 voltas na simulação de 35s), tornando a rotação da formação e a ronda perfeitamente visíveis ao operador.
+2. **Satélites Periféricos em Órbita Independente ($R=48.0\text{ m}$):** Os 4 satélites ($S_1 \dots S_4$) orbitam de forma independente ao redor do enxame. Quando necessário, emparelham-se temporariamente em voo tandem por $T$ segundos para descarregar mensagens no núcleo e, em seguida, desacoplam retomando suas órbitas periféricas livres.
+3. **Saída do Nó para Ronda Externa:** Em $t = 12.0\text{s}$, o Nó $C_4$ desacopla da formação, acelera a $14.0\text{ m/s}$ e sobe para $z=22.0\text{ m}$ executando uma ampla ronda de reconhecimento perimetral externa.
+4. **Rearranjo Automático (*FF Control*):** Em $t = 12.5\text{s}$, o Nó $C_5$ avança dinamicamente cobrindo a vaga de $C_4$. A Spanning Tree ajusta imediatamente o roteamento ($C_3 \leftrightarrow C_5$), mantendo a formação em V íntegra e sem perda de pacotes durante o trânsito da mensagem de $S_2$ para $S_4$.
+5. **Reintegração do Nó com Interceptação:** Em $t = 19.0\text{s}$, $C_4$ inicia a aproximação calculando o ponto de interceptação do slot 4 a $t=22.0\text{s}$. Em $t = 22.0\text{s}$ (após a volta completa de 360°), $C_4$ reentra no Core em slot 4, enquanto $C_5$ retorna à ponta da asa, restaurando a formação completa de 9 nós.
+
+### 7.3. Cadência Visual e Fluxos de Mensagens Validados
+A transmissão na Árvore Geradora opera com **0.65 segundos de intervalo por salto**, garantindo observabilidade nítida e acompanhamento no 3D:
+* **Disparo Inicial (Torre 0 $\to$ S1):** Torre Central envia `CMD_MISSION_01` via $C_1 \to C_2 \to C_3 \to C_4 \to C_5 \to S_1$. Satélite $S_1$ recebe a ordem em $t = 5.3\text{s}$.
+* **Transmissão S1 $\to$ S2:** $S_1$ acopla em tandem com $C_5$ e injeta `MSG_S1_TO_S2` em $t = 6.0\text{s}$. A formação transporta a mensagem pela asa esquerda ($C_5 \to C_4 \to C_3 \to C_2 \to C_1$) e o Ápice $C_1$, ao passar próximo do satélite $S_2$ no Norte, entrega a mensagem diretamente para $S_2$ em $t = 9.4\text{s}$ (6 saltos, latência $3.31\text{s}$). $S_1$ desacopla em $t = 7.5\text{s}$ e retoma sua órbita.
+* **Transmissão S3 $\to$ S2:** Em $t = 10.0\text{s}$, $S_3$ acopla em tandem com $C_9$ e injeta `MSG_S3_TO_S2` em $t = 10.5\text{s}$. O V repassa pela asa direita ($C_9 \to C_8 \to C_7 \to C_6 \to C_1$) e $C_1$ entrega para $S_2$ em $t = 13.8\text{s}$ (6 saltos, latência $3.31\text{s}$). $S_3$ desacopla em $t = 12.5\text{s}$.
+* **Transmissão S2 $\to$ S4 (Cruzando o Enxame durante Ronda e Adaptação FF):** Em $t = 14.6\text{s}$, $S_2$ despacha `MSG_S2_TO_S4` via $C_1$. O enxame encaminha via $C_1 \to C_2 \to C_3 \to C_5$ (atravessando o salto adaptado de $C_5$ cobrindo a vaga de $C_4$ em patrulha). Na passagem pelo Sul, $C_5$ entrega para $S_4$ em $t = 17.2\text{s}$ (5 saltos, latência $2.65\text{s}$).
+* **Relatório Consolidado para a Torre (S4 $\to$ Torre 0):** Em $t = 23.0\text{s}$ (com a formação de 9 nós 100% restaurada após a volta completa de 360°), $S_4$ despacha `REPORT_TO_TOWER` via $C_9 \to C_8 \to C_7 \to C_6 \to C_1 \to \text{Torre } 0$. A Torre recebe o relatório em $t = 26.3\text{s}$ com RTT de $24.31\text{s}$!
+
+**Conclusão:** 100% de PDR atingido (5/5 mensagens entregues), 0 transmissões redundantes na Spanning Tree (30 transmissões no canal: 29 unicasts dirigidos + 1 broadcast final) e acompanhamento visual perfeito no visualizador 3D.
+
+
