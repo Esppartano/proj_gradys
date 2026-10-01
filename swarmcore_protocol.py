@@ -59,8 +59,8 @@ class SwarmCoreProtocol(BaseFANETProtocol):
     COLOR_APEX = (160, 32, 240)          # Roxo Imperial Neon (Ápice / Líder do V)
     COLOR_CORE_WING = (30, 144, 255)     # Azul Claro Vivo (Drones das Asas do V)
     COLOR_CORE_ADJUSTED = (0, 190, 255)  # Turquesa (Nó rearranjado por FF Control)
-    COLOR_SATELLITE_ORBIT = (255, 140, 0)# Laranja Solar (Satélite em Órbita Periférica)
-    COLOR_TANDEM = (255, 230, 0)         # Amarelo Ouro Neon (Acoplado em Voo Tandem)
+    COLOR_RONDA = (255, 140, 0)          # Laranja Solar (Drone C4 em Ronda Externa)
+    COLOR_READY = (255, 220, 0)          # Amarelo Ouro Neon (Satélites em Prontidão / Aguardando)
     COLOR_TRANSMITTING = (255, 120, 0)   # Laranja Brilhante (Transmitindo Pacote)
     COLOR_FWD_ROUTING = (0, 255, 255)    # Ciano Elétrico Puro (Recebendo/Encaminhando)
     COLOR_DATA_RECV = (0, 255, 80)       # Verde Limão Neon (Dado Entregue com Sucesso)
@@ -147,24 +147,23 @@ class SwarmCoreProtocol(BaseFANETProtocol):
             self.orbit_omega = 0.10
             self.orbit_radius = 48.0
 
+            self.set_node_color(self.COLOR_READY)
+
             if my_id == 10:
                 self.is_tandem = True
                 self.tandem_target_id = 5
-                self.set_node_color(self.COLOR_TANDEM)
-                self.set_tracked_variable("Estado", "Voo Tandem Acoplado com Hub C5 (T=7.5s)")
+                self.set_tracked_variable("Estado", "Prontidão (Voo Tandem C5 - Aguardando Ordem)")
                 self.log("ACOPLAMENTO TANDEM: Satélite S1 conectado ao Hub C5 em movimento tandem!")
                 self.provider.schedule_timer("undock_tandem_s1", now + 7.5)
             elif my_id == 12:
                 self.is_tandem = False
                 self.tandem_target_id = None
-                self.set_node_color(self.COLOR_SATELLITE_ORBIT)
-                self.set_tracked_variable("Estado", "Órbita Periférica ao redor do Core")
+                self.set_tracked_variable("Estado", "Prontidão (Órbita - Aguardando Janela de Disparo)")
                 self.provider.schedule_timer("dock_tandem_s3_c9", now + 10.0)
             else:
                 self.is_tandem = False
                 self.tandem_target_id = None
-                self.set_node_color(self.COLOR_SATELLITE_ORBIT)
-                self.set_tracked_variable("Estado", "Órbita Periférica ao redor do Core")
+                self.set_tracked_variable("Estado", "Prontidão (Órbita - Aguardando Mensagem)")
 
             # Inicia movimento dos satélites
             self.provider.schedule_timer("satellite_orbit_step", now + 0.1)
@@ -323,7 +322,7 @@ class SwarmCoreProtocol(BaseFANETProtocol):
         # Nó C4 sai da formação em V para ronda externa de patrulha (t = 12.0s)
         elif timer == "core_exit_formation" and my_id == 4:
             self.is_exited = True
-            self.set_node_color(self.COLOR_SATELLITE_ORBIT)
+            self.set_node_color(self.COLOR_RONDA)
             self.set_tracked_variable("Papel", "Core C4 (Em Ronda Externa)")
             self.set_tracked_variable("Estado", "Executando Ronda de Patrulha Externa (Altitude 22m)")
             self.set_speed(14.0)
@@ -414,7 +413,6 @@ class SwarmCoreProtocol(BaseFANETProtocol):
             td_y = u * math.sin(angle) - v * math.cos(angle)
             cur_angle = math.atan2(td_y, td_x)
             self.orbit_phase = cur_angle - (now * self.orbit_omega)
-            self.set_node_color(self.COLOR_SATELLITE_ORBIT)
             self.set_tracked_variable("Estado", "Desacoplou de C5 / Retomou Órbita Periférica")
             self.log("DESACOPLAMENTO: Satélite S1 desacoplou de C5 e retomou órbita independente.")
 
@@ -431,7 +429,6 @@ class SwarmCoreProtocol(BaseFANETProtocol):
             )
             self.seen_packets.add(pkt.packet_id)
             METRICS.data_sent += 1
-            self.set_node_color(self.COLOR_TRANSMITTING)
             self.log("Swarm Core [S1 -> S2]: S1 injetou 'MSG_S1_TO_S2' no Hub C5 para entrega em S2 via Ápice C1!")
             self.send_unicast(pkt.serialize(), destination=5)
 
@@ -439,7 +436,6 @@ class SwarmCoreProtocol(BaseFANETProtocol):
         elif timer == "dock_tandem_s3_c9" and my_id == 12:
             self.is_tandem = True
             self.tandem_target_id = 9
-            self.set_node_color(self.COLOR_TANDEM)
             self.set_tracked_variable("Estado", "Voo Tandem Acoplado com Hub C9 (T=2.5s)")
             self.log("ACOPLAMENTO TANDEM: Satélite S3 conectou-se ao Hub C9 em movimento tandem!")
             self.provider.schedule_timer("send_msg_s3_to_s2", now + 0.5)
@@ -455,7 +451,6 @@ class SwarmCoreProtocol(BaseFANETProtocol):
             td_y = u * math.sin(angle) - v * math.cos(angle)
             cur_angle = math.atan2(td_y, td_x)
             self.orbit_phase = cur_angle - (now * self.orbit_omega)
-            self.set_node_color(self.COLOR_SATELLITE_ORBIT)
             self.set_tracked_variable("Estado", "Desacoplou de C9 / Retomou Órbita Periférica")
             self.log("DESACOPLAMENTO: Satélite S3 desacoplou de C9 e retomou órbita independente.")
 
@@ -472,7 +467,8 @@ class SwarmCoreProtocol(BaseFANETProtocol):
             )
             self.seen_packets.add(pkt.packet_id)
             METRICS.data_sent += 1
-            self.set_node_color(self.COLOR_TRANSMITTING)
+            self.set_node_color(self.COLOR_DATA_RECV)  # Sensor despachado -> Verde
+            self.set_tracked_variable("Estado", "Dados Despachados com Sucesso para C9")
             self.log("Swarm Core [S3 -> S2]: S3 injetou 'MSG_S3_TO_S2' no Hub C9 para entrega em S2 via Ápice C1!")
             self.send_unicast(pkt.serialize(), destination=9)
 
@@ -489,7 +485,6 @@ class SwarmCoreProtocol(BaseFANETProtocol):
             )
             self.seen_packets.add(pkt.packet_id)
             METRICS.data_sent += 1
-            self.set_node_color(self.COLOR_TRANSMITTING)
             self.log("Swarm Core [S2 -> S4]: S2 disparou 'MSG_S2_TO_S4' via Ápice C1 cruzando a formação em direção a S4!")
             self.send_unicast(pkt.serialize(), destination=1)
 
@@ -506,7 +501,6 @@ class SwarmCoreProtocol(BaseFANETProtocol):
             )
             self.seen_packets.add(report_pkt.packet_id)
             METRICS.data_sent += 1
-            self.set_node_color(self.COLOR_TRANSMITTING)
             self.log("Satélite S4: Enviando relatório consolidado para a Torre Terrestre (0) via Hub C9 e Ápice C1...")
             self.send_unicast(report_pkt.serialize(), destination=9)
 

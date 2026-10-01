@@ -264,15 +264,15 @@ Escolha o cenário de simulação:
 
 | Cor do Nó | Código RGB (CSS) | Significado / Evento Representado no Protocolo |
 | :---: | :---: | :--- |
-| 🔵 **Azul Royal Profundo** | `(20, 60, 220)` | **Torre Terrestre / Solo (0):** Estação Base emissora da missão e receptora do relatório final. |
-| 🟣 **Roxo Imperial Neon** | `(160, 32, 240)` | **Líder / Ápice do V ($C_1$):** Vértice da formação e nó raiz (*Root*) da Spanning Tree. |
-| 🔵 **Azul Claro Vivo** | `(30, 144, 255)` | **Drones do Core ($C_2$ a $C_9$):** Nós das asas esquerda e direita da formação em V. |
-| 🔷 **Turquesa Neon** | `(0, 190, 255)` | **Nó Rearranjado (*FF Control*):** Drone que ajustou posição para cobrir a vaga do nó em ronda. |
-| 🟠 **Laranja Solar** | `(255, 140, 0)` | **Satélite / Drone em Ronda Externa:** Drone realizando patrulha orbital na periferia. |
-| 🟡 **Amarelo Ouro Neon** | `(255, 230, 0)` | **Acoplamento em Tandem:** Satélite emparelhado com hub do Core navegando em conjunto. |
-| 🔷 **Ciano Elétrico Puro** | `(0, 255, 255)` | **Encaminhamento na Árvore:** Drones intermediários repassando pacote via Spanning Tree. |
-| 🟢 **Verde Limão Neon** | `(0, 255, 80)` | **Dado / ACK Absorvido:** Satélite ou nó no momento em que recebe a mensagem com sucesso. |
-| 🟢 **Verde Esmeralda** | `(0, 230, 115)` | **Missão 100% Concluída:** Torre e enxame após validação e entrega de todos os dados. |
+| 🔵 **Azul** | `(20, 60, 220)` | **Torre Terrestre / Solo (0):** Estação Base emissora da missão e receptora do relatório final. |
+| 🟣 **Roxo** | `(160, 32, 240)` | **Líder / Ápice do V ($C_1$):** Vértice da formação e nó raiz (*Root*) da Spanning Tree. |
+| 🔵 **Azul Claro** | `(30, 144, 255)` | **Drones do Core ($C_2$ a $C_9$):** Nós das asas esquerda e direita da formação em V. |
+| 🔷 **Turquesa** | `(0, 190, 255)` | **Nó Rearranjado (*FF Control*):** Drone que ajustou posição para cobrir a vaga do nó em ronda ($C_5$). |
+| 🟠 **Laranja** | `(255, 140, 0)` | **Drone em Ronda Externa:** Drone realizando patrulha perimetral fora da formação ($C_4$). |
+| 🟡 **Amarelo** | `(255, 220, 0)` | **Satélites em Prontidão:** Drones periféricos em espera / aguardando recebimento de mensagens ($S_1 \dots S_4$). |
+| 🔷 **Ciano** | `(0, 255, 255)` | **Encaminhamento na Árvore:** Drones intermediários repassando pacote via Spanning Tree. |
+| 🟢 **Verde** | `(0, 255, 80)` | **Dado Entregue com Sucesso:** Satélite ou nó no momento em que recebe a mensagem com sucesso. |
+| 🟢 **Verde Claro** | `(0, 230, 115)` | **Missão 100% Concluída:** Torre e enxame após validação e entrega de todos os dados. |
 
 ### 6.2. Painel de Inspeção do Nó (*HUD / Tracked Variables*)
 Ao **clicar com o mouse sobre qualquer nó** na interface 3D, um painel lateral exibe as variáveis atualizadas em tempo real:
