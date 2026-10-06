@@ -1,35 +1,31 @@
 """
-Esquemas das mensagens de roteamento.
-
-Todas as mensagens são dicionários serializados em JSON, como no template.
-Mensagens de roteamento usam o campo `msg_type` (o template usa `sender_type`
-para heartbeats de UAV e respostas de sensores), então os dois tráfegos não
-se confundem.
+Esquemas das mensagens de roteamento (dicionários serializados em JSON).
 """
-from typing import Dict, List, Tuple, TypedDict
+from typing import Dict, List, Optional, Tuple, TypedDict
 
 Position = Tuple[float, float, float]
 
 # Valores de `msg_type`
-DATA = "routing_data"      # mensagem de dados (Flooding / GeoCast)
+DATA = "routing_data"      # mensagem de dados (Flooding / GeoCast / Árvore)
 BUNDLE = "dtn_bundle"      # lote de mensagens em transferência de custódia (DTN)
 ACK = "dtn_ack"            # confirmação de custódia (DTN)
-BEACON = "beacon"          # anúncio de posição (DTN e estação base)
+BEACON = "beacon"          # anúncio periódico de posição (DTN e Árvore)
 
 
 class DataMessage(TypedDict, total=False):
     msg_type: str
     message_id: str         # "<origem>:<sequência>", único na simulação
+    name: str               # rótulo do fluxo (ex.: CMD_MISSAO, TELEM_S1_3)
     origin_id: int
+    destination: int
+    dest_pos: Optional[Position]  # posição do destino na criação (serviço de localização)
     sender_id: int          # último nó que transmitiu
-    created_at: float       # instante de criação (relógio da simulação)
+    created_at: float
     hops: int               # saltos de rádio percorridos até aqui
-    payload: Dict[str, int] # sensor → contagem de pacotes coletados
     # Flooding / GeoCast
     ttl: int
     # GeoCast
     source_pos: Position
-    dest_pos: Position
     dest_radius: float
 
 

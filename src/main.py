@@ -1,17 +1,13 @@
 """
-Ponto de entrada da simulação (Fase 1: comparação de roteamento).
+Orquestração: um único cenário (Swarm Core em V), só o protocolo muda.
 
-Um único cenário (sensores + 12 UAVs em patrulha + estação base); só o
-protocolo de roteamento muda.
-
-Uso (sempre a partir da raiz do projeto):
-    python -m src.main --protocol dtn            # com visualizador 3D
-    python -m src.main --protocol geocast --no-viz
-    python -m src.main --benchmark               # roda os 3 protocolos headless
+O menu interativo fica em `main.py`, na raiz. Uso direto:
+    python -m src.main --protocol tree            # visualizador 3D
+    python -m src.main --protocol dtn --no-viz
+    python -m src.main --benchmark                # os 4 protocolos headless
 """
 import argparse
 import logging
-from math import dist
 from typing import Dict, List
 
 from gradysim.simulator.handler.communication import CommunicationHandler, CommunicationMedium
@@ -20,65 +16,36 @@ from gradysim.simulator.handler.timer import TimerHandler
 from gradysim.simulator.handler.visualization import VisualizationConfiguration, VisualizationHandler
 from gradysim.simulator.simulation import SimulationBuilder, SimulationConfiguration
 
-from src.base_station import make_base_station
+from src.config import COMM_DELAY, COMM_RANGE, SIMULATION_DURATION
 from src.metrics import METRICS
-from src.sensor import Sensor
-from src.uav import PROTOCOLS, make_uav
-from utils.actor_templates.sensor_template import SensorProtocol
-from utils.common.config import (
-    BASE_GROUND,
-    COMM_DELAY,
-    COMM_RANGE,
-    ENDPOINT_GROUND,
-    FLIGHT_ALT,
-    LEFT_WAYPOINTS,
-    NUM_UAVS,
-    RIGHT_WAYPOINTS,
-    SENSOR_POSITIONS,
-    SIMULATION_DURATION,
-    UAV_SPEED,
-)
-
-
-def _patrol_cycle(waypoints) -> float:
-    """Tempo de ida e volta pela rota, em segundos."""
-    length = sum(dist(a[:2], b[:2]) for a, b in zip(waypoints, waypoints[1:]))
-    return 2 * length / UAV_SPEED
+from src.node import LOCATIONS
+from src.nodes import PROTOCOLS, make_node
+from src.scenario import ALL_NODES, initial_position
 
 
 def run(protocol: str, viz: bool) -> Dict[str, float]:
     METRICS.reset()
+    LOCATIONS.clear()
     builder = SimulationBuilder(SimulationConfiguration(
         duration=SIMULATION_DURATION,
         real_time=viz,
         execution_logging=False,
     ))
 
-    # Nó 0: estação base. Os sensores vêm em seguida porque o template deriva
-    # o nome do sensor do ID (sensor_N tem ID N+1).
-    builder.add_node(make_base_station(PROTOCOLS[protocol].needs_base_beacon, viz), BASE_GROUND)
-    for sensor_pos in SENSOR_POSITIONS.values():
-        builder.add_node(Sensor if viz else SensorProtocol, sensor_pos)
-
-    # Metade dos UAVs em cada rota do template em torno do obstáculo, com
-    # decolagens escalonadas por 1/per_route do ciclo para espalhá-los na rota.
-    per_route = NUM_UAVS // 2
-    for waypoints in (LEFT_WAYPOINTS, RIGHT_WAYPOINTS):
-        step = _patrol_cycle(waypoints) / per_route
-        for i in range(per_route):
-            builder.add_node(make_uav(protocol, waypoints, i * step, viz), BASE_GROUND)
+    Node = make_node(protocol, viz)
+    for node_id in ALL_NODES:  # a ordem de criação define os IDs (0 = torre)
+        builder.add_node(Node, initial_position(node_id))
 
     builder.add_handler(TimerHandler())
     builder.add_handler(MobilityHandler())
     builder.add_handler(CommunicationHandler(CommunicationMedium(transmission_range=COMM_RANGE, delay=COMM_DELAY)))
     if viz:
-        padding = 50
-        all_x = [p[0] for p in SENSOR_POSITIONS.values()] + [BASE_GROUND[0], ENDPOINT_GROUND[0]]
-        all_y = [p[1] for p in SENSOR_POSITIONS.values()] + [BASE_GROUND[1], ENDPOINT_GROUND[1]]
         builder.add_handler(VisualizationHandler(VisualizationConfiguration(
-            x_range=(min(all_x) - padding, max(all_x) + padding),
-            y_range=(min(all_y) - padding, max(all_y) + padding),
-            z_range=(0, FLIGHT_ALT + 20),
+            x_range=(-40.0, 90.0),
+            y_range=(-65.0, 65.0),
+            z_range=(0.0, 40.0),
+            information_collection_interval=0.05,
+            update_rate=0.05,
             open_browser=True,
         )))
 
@@ -91,6 +58,7 @@ COLUMNS = [
     ("Criadas", "created", "{}"),
     ("Entregues", "delivered", "{}"),
     ("PDR %", "pdr", "{:.1f}"),
+    ("Missão", "mission", "{}"),
     ("Lat. média s", "lat_mean", "{:.2f}"),
     ("Lat. mediana s", "lat_median", "{:.2f}"),
     ("Saltos médios", "hops_mean", "{:.2f}"),
@@ -101,7 +69,7 @@ COLUMNS = [
     ("Entregas dupl.", "duplicate_deliveries", "{}"),
     ("Desc. TTL", "ttl_drops", "{}"),
     ("Podas zona", "zone_drops", "{}"),
-    ("Desc. buffer", "buffer_drops", "{}"),
+    ("Cópias expiradas", "expired", "{}"),
 ]
 
 
@@ -114,19 +82,16 @@ def print_table(results: List[Dict[str, float]]) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Comparação de roteamento em FANET (GrADySim)")
-    parser.add_argument("--protocol", choices=sorted(PROTOCOLS), default="flooding")
+    parser = argparse.ArgumentParser(description="Comparação de roteamento no Swarm Core (GrADySim)")
+    parser.add_argument("--protocol", choices=list(PROTOCOLS), default="tree")
     parser.add_argument("--no-viz", action="store_true", help="desativa o visualizador 3D")
     parser.add_argument("--benchmark", action="store_true", help="roda todos os protocolos headless")
     args = parser.parse_args()
-    # Os logs INFO do template (uma linha por coleta de sensor) e do GrADySim
-    # poluem a saída; avisos e erros continuam visíveis.
     logging.disable(logging.INFO)
 
     protocols = list(PROTOCOLS) if args.benchmark else [args.protocol]
     viz = not (args.no_viz or args.benchmark)
-    results = [{"protocol": p, **run(p, viz)} for p in protocols]
-    print_table(results)
+    print_table([{"protocol": p, **run(p, viz)} for p in protocols])
 
 
 if __name__ == "__main__":
