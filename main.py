@@ -12,9 +12,10 @@ Uso, a partir da raiz do projeto:
 """
 import logging
 import sys
+from pathlib import Path
 from typing import Optional
 
-from src.main import print_table, run
+from src.motor import print_table, run, write_table_to_file
 from src.nodes import PROTOCOLS
 
 SCENARIOS = {
@@ -24,6 +25,7 @@ SCENARIOS = {
     "4": ("Árvore Geradora (roteamento do Swarm Core)", "tree"),
 }
 BENCHMARK = "5"
+RESULTS_FILE = Path(__file__).resolve().parent / "results.md"  # sempre na raiz do projeto
 USAGE = "Uso: python main.py <opcao: 1-5> [modo: 1-2]"
 
 
@@ -34,7 +36,10 @@ def run_scenario(option: str, viz: bool) -> None:
 
 def run_benchmark() -> None:
     print("\nRodando os 4 protocolos em modo headless...\n")
-    print_table([{"protocol": p, **run(p, viz=False)} for p in PROTOCOLS])
+    results = [{"protocol": p, **run(p, viz=False)} for p in PROTOCOLS]
+    print_table(results)
+    write_table_to_file(results, RESULTS_FILE)
+    print(f"\nTabela salva em {RESULTS_FILE}")
 
 
 def prompt_mode() -> Optional[bool]:
@@ -58,7 +63,6 @@ def prompt_mode() -> Optional[bool]:
             return None
         print(f"\n[AVISO] Opção '{mode}' inválida! Digite '1' para Visualizador 3D, '2' para Headless ou '0' para Voltar.")
 
-
 def pause() -> bool:
     try:
         input("\nPressione [ENTER] para retornar ao menu principal...")
@@ -66,8 +70,7 @@ def pause() -> bool:
     except (EOFError, KeyboardInterrupt):
         return False
 
-
-def main() -> None:
+def main():
     # Logs INFO do GrADySim poluem a saída; os eventos de roteamento são impressos à parte.
     logging.disable(logging.INFO)
 

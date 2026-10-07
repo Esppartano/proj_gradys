@@ -17,9 +17,9 @@ from src.scenario import TOWER, label
 PROTOCOL_NAMES = {"flooding": "Flooding", "geocast": "GeoCast", "dtn": "DTN", "tree": "Árvore Geradora"}
 
 # Cores por papel (RGB 0-255), as mesmas do Swarm Core original
-COLOR_TOWER = (20, 60, 220)        # azul royal: torre terrestre
+COLOR_TOWER = (20, 60, 220)        # azul: torre terrestre
 COLOR_APEX = (160, 32, 240)        # roxo: líder C1
-COLOR_WING = (30, 144, 255)        # azul claro: asas do V
+COLOR_WING = (255, 255, 255)       # branco: asas do V
 COLOR_COVER = (0, 190, 255)        # turquesa: nó cobrindo a vaga (FF Control)
 COLOR_RONDA = (255, 140, 0)        # laranja: nó em ronda externa
 COLOR_SATELLITE = (255, 220, 0)    # amarelo: satélites

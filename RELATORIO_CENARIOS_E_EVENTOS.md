@@ -172,7 +172,7 @@ Transmissões de dados por entrega: Flooding 13,6; GeoCast 10,0; **DTN 1,6**; **
 | :---: | :--- |
 | Azul royal | Torre terrestre |
 | Roxo | Líder C1 |
-| Azul claro | Asas do V |
+| Branco | Asas do V |
 | Turquesa | C5 cobrindo a vaga de C4 |
 | Laranja | C4 em ronda externa |
 | Amarelo | Satélites |
