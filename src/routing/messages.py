@@ -15,7 +15,7 @@ BEACON = "beacon"          # anúncio periódico de posição (DTN e Árvore)
 class DataMessage(TypedDict, total=False):
     msg_type: str
     message_id: str         # "<origem>:<sequência>", único na simulação
-    name: str               # rótulo do fluxo (ex.: CMD_MISSAO, TELEM_S1_3)
+    name: str               # rótulo do fluxo (ex.: CMD_MISSAO, RAND_S1_S2_3)
     origin_id: int
     destination: int
     dest_pos: Optional[Position]  # posição do destino na criação (serviço de localização)

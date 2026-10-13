@@ -6,14 +6,16 @@ pela orquestração para criar os nós.
 
 IDs: 0 = torre terrestre, 1..9 = Core em V (C1..C9), 10..13 = satélites (S1..S4).
 """
+import random
+from functools import lru_cache
 from math import atan2, cos, sin
 from typing import List, Tuple
 
 from src.config import (
     CENTER, CORE_ALT, COVER_NODE, COVER_START, MISSION_TRAFFIC, RONDA_END,
     RONDA_NODE, ROTATION_OMEGA, SATELLITE_ALT, SATELLITE_OMEGA,
-    SATELLITE_ORBIT_RADIUS, SATELLITE_PHASES, TELEMETRY_END, TELEMETRY_INTERVAL,
-    TELEMETRY_START, TOWER_ALT, V_SLOTS,
+    RANDOM_END, RANDOM_INTERVAL, RANDOM_START, SATELLITE_ORBIT_RADIUS,
+    SATELLITE_PHASES, TOWER_ALT, TRAFFIC_SEED, V_SLOTS,
 )
 
 Position = Tuple[float, float, float]
@@ -86,14 +88,21 @@ def initial_position(node_id: int) -> Position:
 
 # ── Tráfego ────────────────────────────────────────────────────────────────
 
+@lru_cache(maxsize=None)
 def traffic() -> List[Tuple[float, int, int, str]]:
-    """Todas as mensagens da simulação: (instante, origem, destino, rótulo)."""
+    """Todas as mensagens da simulação: (instante, origem, destino, rótulo).
+
+    Missão encadeada fixa + tráfego aleatório entre satélites. O sorteio usa
+    TRAFFIC_SEED, então todo protocolo recebe exatamente as mesmas mensagens.
+    """
+    rng = random.Random(TRAFFIC_SEED)
     flows = list(MISSION_TRAFFIC)
     for sat in SATELLITES:
-        t = TELEMETRY_START + (sat - SATELLITES[0])
+        t = RANDOM_START + rng.uniform(*RANDOM_INTERVAL)
         n = 1
-        while t <= TELEMETRY_END:
-            flows.append((t, sat, TOWER, f"TELEM_{label(sat)}_{n}"))
-            t += TELEMETRY_INTERVAL
+        while t <= RANDOM_END:
+            dst = rng.choice([s for s in SATELLITES if s != sat])
+            flows.append((round(t, 2), sat, dst, f"RAND_{label(sat)}_{label(dst)}_{n}"))
+            t += rng.uniform(*RANDOM_INTERVAL)
             n += 1
     return sorted(flows)

@@ -5,30 +5,45 @@ Roteamento por Árvore Geradora sobre a formação em V (protocolo do Swarm Core
 asa direita (C6→C7→C8→C9). Os satélites ficam fora da árvore.
 
 - Detecção de enlace: todos emitem beacons. Se o pai não é ouvido há mais de
-  NEIGHBOR_TIMEOUT, o nó se liga ao ancestral vivo mais próximo (ex.: quando C4
-  sai para a ronda, C5 passa a usar C3). Nada depende do relógio da simulação.
+  NEIGHBOR_TIMEOUT, o nó se liga ao ancestral vivo mais próximo (ex.: se C5
+  deixar de ouvir C4, passa a usar C3). A troca não depende do relógio.
 - Destino vizinho: se o destino é ouvido diretamente, envio direto por unicast.
 - Satélite → qualquer destino: injeta no nó do Core mais próximo que ele ouve.
 - Destino = torre: sobe pela árvore (pai efetivo a cada salto).
-- Destino = satélite: a mensagem se espalha pela árvore por unicast (uma cópia
-  por nó, sem broadcast). Cada nó guarda sua cópia por TREE_HOLD_TIME e a
-  entrega se ouvir o satélite. Várias cópias podem chegar (entregas duplicadas).
+- Destino = satélite: o nó de entrada escolhe como alvos os TREE_TARGETS nós
+  do Core mais próximos da posição do satélite (dest_pos) e a mensagem segue o
+  caminho da árvore só até eles, por unicast. Cada alvo guarda uma cópia por
+  TREE_HOLD_TIME e a entrega se ouvir o satélite. A posição de cada nó do Core
+  vem do slot da formação, conhecido por todos (estrutura virtual).
 - Sem próximo salto disponível, a mensagem espera e é reavaliada a cada beacon.
 """
 from math import dist
 from typing import Dict, List, Optional, Tuple
 
-from src.config import TREE_HOLD_TIME
+from src.config import RONDA_END, RONDA_NODE, RONDA_START, TREE_HOLD_TIME, TREE_TARGETS
 from src.metrics import METRICS
 from src.routing import messages as m
 from src.routing.base import RoutingMixin
-from src.scenario import CORE, TOWER, label
+from src.scenario import CORE, TOWER, core_slot, label, slot_position
 
 PARENT = {1: TOWER, 2: 1, 3: 2, 4: 3, 5: 4, 6: 1, 7: 6, 8: 7, 9: 8}
 CHILDREN: Dict[int, List[int]] = {n: [] for n in [TOWER] + CORE}
 for _child, _parent in PARENT.items():
     CHILDREN[_parent].append(_child)
 TREE_NODES = set(CHILDREN)
+
+
+def subtree(node: int) -> set:
+    """O nó e todos os seus descendentes na árvore estática."""
+    result, stack = set(), [node]
+    while stack:
+        n = stack.pop()
+        result.add(n)
+        stack.extend(CHILDREN[n])
+    return result
+
+
+SUBTREE = {n: subtree(n) for n in TREE_NODES}
 
 
 class TreeMixin(RoutingMixin):
@@ -98,15 +113,46 @@ class TreeMixin(RoutingMixin):
             self._note("forwarded", f"Repassou {message['name']} ao pai {label(parent)}", "forwarded")
             return
 
-        # Satélite como destino: espalha pela árvore e guarda uma cópia
-        targets = [n for n in [self.effective_parent(), *self.effective_children()]
-                   if n is not None and n != came_from]
-        for peer_id in targets:
-            self._send(message, peer_id)
-        self._hold[message["message_id"]] = (message, self.provider.current_time() + TREE_HOLD_TIME)
-        if targets:
-            names = ", ".join(label(t) for t in targets)
-            self._note("forwarded", f"Espalhou {message['name']} na árvore → {names}", "forwarded", len(targets))
+        # Satélite como destino: segue pela árvore até os nós-alvo
+        if "targets" not in message:  # nó de entrada na árvore escolhe os alvos
+            message = {**message, "targets": self._choose_targets(message)}
+        targets = message["targets"]
+        if my_id in targets:
+            self._hold[message["message_id"]] = (message, self.provider.current_time() + TREE_HOLD_TIME)
+        by_hop: Dict[int, List[int]] = {}
+        for target in targets:
+            if target == my_id:
+                continue
+            hop = self._next_hop(target)
+            if hop is None:  # sem caminho agora: espera o próximo beacon
+                self._pending.append(({**message, "targets": [target]}, came_from))
+                continue
+            by_hop.setdefault(hop, []).append(target)
+        for hop, group in by_hop.items():
+            self._send({**message, "targets": group}, hop)
+            names = ", ".join(label(t) for t in group)
+            self._note("forwarded", f"Encaminhou {message['name']} a {label(hop)} (alvo {names})", "forwarded")
+
+    def _choose_targets(self, message: m.DataMessage) -> List[int]:
+        """Os TREE_TARGETS nós do Core mais próximos da posição do satélite."""
+        t = self.provider.current_time()
+        dest_pos = message.get("dest_pos")
+        candidates = [n for n in CORE if not (n == RONDA_NODE and RONDA_START <= t < RONDA_END)]
+        if dest_pos is None:
+            return candidates[:TREE_TARGETS]
+        slot = {n: slot_position(core_slot(n, t), t) for n in candidates}
+        candidates.sort(key=lambda n: dist(slot[n][:2], dest_pos[:2]))
+        return candidates[:TREE_TARGETS]
+
+    def _next_hop(self, target: int) -> Optional[int]:
+        """Próximo salto no caminho da árvore até o alvo (desce se o alvo está
+        na subárvore deste nó; senão sobe)."""
+        if target in SUBTREE[self.provider.get_id()]:
+            for child in self.effective_children():
+                if target in SUBTREE[child]:
+                    return child
+            return None
+        return self.effective_parent()
 
     # ── Eventos ───────────────────────────────────────────────────────────
 

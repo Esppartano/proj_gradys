@@ -5,7 +5,7 @@ todos os parâmetros ajustáveis num só lugar).
 from math import pi
 
 # ── Simulação ──────────────────────────────────────────────────────────────
-SIMULATION_DURATION = 40.0    # s
+SIMULATION_DURATION = 180.0   # s (3 voltas da formação; cada satélite reencontra o Core várias vezes)
 
 # ── Rádio ──────────────────────────────────────────────────────────────────
 COMM_RANGE = 40.0             # m
@@ -16,8 +16,8 @@ CENTER = (25.0, 0.0)          # centro de rotação = posição XY da torre
 TOWER_ALT = 5.0
 CORE_ALT = 15.0
 SATELLITE_ALT = 17.5
-ROTATION_PERIOD = 22.0        # s por volta completa
-ROTATION_OMEGA = 2 * pi / ROTATION_PERIOD   # ≈ 0,2856 rad/s
+ROTATION_PERIOD = 60.0        # s por volta completa ("slowly revolves")
+ROTATION_OMEGA = 2 * pi / ROTATION_PERIOD   # ≈ 0,1047 rad/s
 CORE_SPEED = 14.0             # m/s (teto para a asa externa acompanhar a rotação)
 STEP_INTERVAL = 0.4           # s entre atualizações de destino da formação
 
@@ -50,12 +50,17 @@ RONDA_END = 22.0              # C4 reentra; C5 volta à ponta da asa
 
 # ── Satélites ──────────────────────────────────────────────────────────────
 SATELLITE_ORBIT_RADIUS = 48.0
-SATELLITE_OMEGA = 0.10        # rad/s
+# Sentido contrário ao do Core: velocidade relativa de 0,165 rad/s, um encontro
+# a cada ≈ 38 s. No mesmo sentido (ω ≈ ROTATION_OMEGA) quase não haveria encontros.
+SATELLITE_OMEGA = -0.06       # rad/s
 SATELLITE_PHASES = {10: -0.48, 11: 1.695, 12: 1.30, 13: 2.78}
-# Acoplamentos em tandem: satélite → (hub do Core, início, fim)
+# Acoplamentos em tandem: satélite → janelas (início, fim). Ao iniciar a janela,
+# o satélite acopla no nó do Core mais próximo e o acompanha até o fim.
 TANDEM = {
-    10: (5, 0.0, 7.5),        # S1 acompanha C5 no início
-    12: (9, 10.0, 12.5),      # S3 acopla em C9
+    10: [(0.0, 10.0), (100.0, 110.0)],   # S1 começa acoplado em C5
+    11: [(50.0, 60.0), (140.0, 150.0)],
+    12: [(10.0, 20.0), (120.0, 130.0)],
+    13: [(70.0, 80.0), (160.0, 170.0)],
 }
 
 # ── Tráfego (igual para todos os protocolos) ───────────────────────────────
@@ -67,10 +72,12 @@ MISSION_TRAFFIC = [
     (14.6, 11, 13, "MSG_S2_S4"),
     (23.0, 13, 0, "RELATORIO"),
 ]
-# Telemetria periódica de cada satélite para a torre
-TELEMETRY_INTERVAL = 4.0      # s
-TELEMETRY_START = 3.0         # s; satélite k começa em START + (k - 10)
-TELEMETRY_END = 28.0          # s
+# Tráfego aleatório: cada satélite envia a outro satélite sorteado, em instantes
+# sorteados. A semente fixa garante o MESMO tráfego para todos os protocolos.
+TRAFFIC_SEED = 42
+RANDOM_INTERVAL = (2.0, 6.0)  # s: intervalo sorteado entre envios de um satélite
+RANDOM_START = 3.0            # s
+RANDOM_END = 165.0            # s (folga para as últimas mensagens chegarem)
 
 # ── Protocolos ─────────────────────────────────────────────────────────────
 BEACON_INTERVAL = 1.0         # s (DTN e Árvore Geradora)
@@ -85,7 +92,8 @@ DTN_BUFFER_SIZE = 200
 DTN_MIN_PROGRESS = 5.0        # m
 DTN_ACK_TIMEOUT = 2.0         # s
 
-TREE_HOLD_TIME = 15.0         # s que um nó da árvore guarda cópia para satélite ausente
+TREE_HOLD_TIME = 40.0         # s que um nó-alvo guarda a cópia (≈ 1 período de encontro, 38 s)
+TREE_TARGETS = 1              # nós do Core mais próximos do satélite que recebem cópia (9 = espalhar)
 
 # ── Visualização (modo 3D) ─────────────────────────────────────────────────
 EVENT_LOG = True              # imprime eventos de roteamento no terminal

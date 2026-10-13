@@ -34,7 +34,7 @@ class SwarmNode(IProtocol):
         self._position: sc.Position = sc.initial_position(self.node_id)
         LOCATIONS[self.node_id] = self._position
         self._orbit_phase: Optional[float] = SATELLITE_PHASES.get(self.node_id)
-        self._was_tandem = False
+        self._tandem_hub: Optional[int] = None
 
         if self.role != "tower":
             self.provider.send_mobility_command(SetSpeedMobilityCommand(CORE_SPEED))
@@ -60,22 +60,25 @@ class SwarmNode(IProtocol):
                 return sc.slot_position(RONDA_NODE, RONDA_END)  # intercepta o slot
             return sc.slot_position(sc.core_slot(self.node_id, t), t)
 
-        hub = self.tandem_hub(t)
-        if hub is not None:
-            self._was_tandem = True
-            x, y, _ = sc.slot_position(sc.core_slot(hub, t), t)
+        in_window = any(start <= t < end for start, end in TANDEM.get(self.node_id, ()))
+        if in_window:
+            if self._tandem_hub is None:  # início da janela: acopla no Core mais próximo
+                self._tandem_hub = self._nearest_core(t)
+            x, y, _ = sc.slot_position(sc.core_slot(self._tandem_hub, t), t)
             return (x, y, SATELLITE_ALT)
-        if self._was_tandem:  # desacoplou: retoma a órbita a partir de onde está
+        if self._tandem_hub is not None:  # desacoplou: retoma a órbita a partir de onde está
             self._orbit_phase = sc.orbit_phase_at(self._position, t)
-            self._was_tandem = False
+            self._tandem_hub = None
         return sc.orbit_position(self._orbit_phase, t)
 
+    def _nearest_core(self, t: float) -> int:
+        """Nó do Core mais próximo (C4 fica de fora até voltar da ronda)."""
+        candidates = [n for n in sc.CORE if not (n == RONDA_NODE and t < RONDA_END)]
+        x, y, _ = self._position
+        return min(candidates, key=lambda n: (LOCATIONS[n][0] - x) ** 2 + (LOCATIONS[n][1] - y) ** 2)
+
     def tandem_hub(self, t: float) -> Optional[int]:
-        if self.node_id in TANDEM:
-            hub, start, end = TANDEM[self.node_id]
-            if start <= t < end:
-                return hub
-        return None
+        return self._tandem_hub
 
     def flight_state(self) -> str:
         """Descrição do estado de voo (HUD)."""
@@ -84,7 +87,7 @@ class SwarmNode(IProtocol):
             return "Estação de solo fixa"
         if self.role == "satellite":
             hub = self.tandem_hub(t)
-            return f"Voo tandem acoplado a {sc.label(hub)}" if hub else "Órbita periférica"
+            return f"Voo tandem acoplado a {sc.label(hub)}" if hub is not None else "Órbita periférica"
         if self.node_id == RONDA_NODE and RONDA_START <= t < RONDA_RETURN:
             return "Ronda externa (fora da formação)"
         if self.node_id == RONDA_NODE and RONDA_RETURN <= t < RONDA_END:
