@@ -1,6 +1,3 @@
-__pycache__/
-*.py[cod]
-*$py.class
 gradys-env/
-.vscode/
-.idea/
+__pycache__/
+*.pyc
