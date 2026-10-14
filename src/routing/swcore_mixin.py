@@ -12,9 +12,12 @@ mantém, para cada endpoint (satélite ou BS), uma entrada com o nº do handshak
   vizinhos da árvore (sem laços: é uma árvore).
 - Despedida ou perda do endpoint: o hub anuncia UNREACH(ep, seq). Anúncios
   com seq menor que o da entrada são descartados (velhos).
-- Dados: o endpoint entrega ao seu hub. No Core: se ouve o destino (hub ou
-  backup que o sente), entrega direto; se há próximo salto, repassa; se está
-  Unreachable, guarda (entrega diferida) até um REACH ou contato com o destino.
+- Dados: o endpoint entrega ao seu hub. No Core, nesta ordem:
+    Direct (endpoint ligado a mim)  → entrega direto;
+    NextHop(Uy)                     → repassa pela árvore;
+    Unreachable, mas eu o sinto     → entrega direto (backup, como no enunciado);
+    Unreachable                     → guarda (entrega diferida) até um REACH
+                                      ou contato com o destino.
 - O líder de mobilidade (C1) não tem papel especial na transmissão.
 """
 from typing import Dict, Optional, Tuple, Union
@@ -43,6 +46,10 @@ class SwCoreMixin(RoutingMixin):
 
     def _originate(self, message: m.DataMessage) -> None:
         self._seen.add(message["message_id"])
+        if self.role == "core":  # nó do Core como origem: roteia ou guarda
+            if not self._route(message):
+                self._hold(message)
+            return
         self._send(message, self.hub)
         self._note("forwarded", f"Entregou {message['name']} ao hub {label(self.hub)}", "forwarded")
 
@@ -86,27 +93,31 @@ class SwCoreMixin(RoutingMixin):
     def _send(self, message: m.DataMessage, peer: int) -> None:
         self._unicast(self._forward_copy(message), peer)
 
-    def _hears_directly(self, endpoint: int) -> bool:
-        """Hub do endpoint, ou backup que o ouviu há menos de um período de beacon."""
-        if endpoint in self.tethered:
-            return True
+    def _senses(self, endpoint: int) -> bool:
+        """Backup: ouvi o endpoint há menos de um período do beacon dele."""
         link = self._links.get(endpoint)
-        limit = 1.2 * LINK_BEACON[link.role] if link else 0
-        return link is not None and self.provider.current_time() - link.heard_at <= limit
+        return link is not None and self.provider.current_time() - link.heard_at <= 1.2 * LINK_BEACON[link.role]
 
     def _route(self, message: m.DataMessage) -> bool:
         """Tenta avançar a mensagem; retorna False se ela precisa esperar."""
         destination = message["destination"]
-        if self._hears_directly(destination):
+        route, _ = self.table.get(destination, (None, -1))
+        if route == DIRECT and destination in self.tethered:
             self._send(message, destination)
             self._note("forwarded", f"Entregou {message['name']} direto a {label(destination)}", "forwarded")
-            return True
-        route, _ = self.table.get(destination, (None, -1))
-        if route is None or route == DIRECT:
+        elif route not in (None, DIRECT):
+            self._send(message, route)
+            self._note("forwarded", f"Repassou {message['name']} a {label(route)}", "forwarded")
+        elif self._senses(destination):
+            self._send(message, destination)
+            self._note("forwarded", f"Entregou {message['name']} a {label(destination)} (backup)", "forwarded")
+        else:
             return False
-        self._send(message, route)
-        self._note("forwarded", f"Repassou {message['name']} a {label(route)}", "forwarded")
         return True
+
+    def _hold(self, message: m.DataMessage) -> None:
+        self._held[message["message_id"]] = (message, self.provider.current_time() + SWCORE_HOLD_TIME)
+        self._note("held", f"Guardou {message['name']} ({label(message['destination'])} inalcançável)")
 
     def _flush_held(self) -> None:
         now = self.provider.current_time()
@@ -138,5 +149,11 @@ class SwCoreMixin(RoutingMixin):
             return
         self._seen.add(raw["message_id"])
         if self.role == "core" and not self._route(raw):
-            self._held[raw["message_id"]] = (raw, self.provider.current_time() + SWCORE_HOLD_TIME)
-            self._note("held", f"Guardou {raw['name']} ({label(raw['destination'])} inalcançável)")
+            self._hold(raw)
+
+    def finish(self) -> None:
+        now = self.provider.current_time()
+        expired = sum(1 for _, expires in self._held.values() if now > expires)
+        METRICS.expired += expired
+        self.stats["expired"] += expired
+        super().finish()

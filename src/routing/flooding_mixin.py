@@ -3,8 +3,13 @@ Flooding com supressão de duplicatas e limite por TTL.
 
 Cada nó retransmite uma mensagem no máximo uma vez (tabela `_seen`).
 O TTL (FLOOD_TTL = diâmetro da rede) limita o número de saltos. O destino
-entrega e não retransmite. Não há armazenamento: se não existir caminho até o
-destino no instante da inundação, a mensagem se perde (não atravessa partições).
+entrega e não retransmite.
+
+Armazenamento: só na origem (regra comum a todos os protocolos, em
+`RoutingMixin._can_originate`): o satélite acumula o que cria enquanto está
+isolado e inunda ao ganhar o primeiro vizinho. Nos intermediários não há
+armazenamento: se não existir caminho até o destino no instante da inundação,
+a mensagem se perde (não atravessa partições).
 """
 from src.config import FLOOD_TTL
 from src.metrics import METRICS

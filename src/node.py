@@ -68,7 +68,8 @@ class SwarmNode(IProtocol):
 
         # Endpoints (satélites e BS)
         self.hub: Optional[int] = None
-        self._link_seq = 0
+        self._link_seq = 0      # último seq pedido
+        self._acked_seq = 0     # seq confirmado pelo hub atual (usado no link_bye)
         self.flight = "fixo" if self.role == "bs" else "formação"
         # Core
         self.tethered: Dict[int, int] = {}  # endpoint → seq do handshake
@@ -183,13 +184,17 @@ class SwarmNode(IProtocol):
         elif kind == "link_req" and self.role == "core":
             self._links[sender] = Neighbor(raw, now)  # o pedido também prova que o ouvi
             self.tethered[sender] = raw["seq"]
-            self._send_raw({"msg_type": "link_ack", "id": self.node_id}, sender)
+            self._send_raw({"msg_type": "link_ack", "id": self.node_id, "seq": raw["seq"]}, sender)
             self._on_link_up(sender, raw["seq"])
         elif kind == "link_bye" and self.role == "core":
             if self.tethered.get(sender) == raw["seq"]:
                 del self.tethered[sender]
                 self._on_link_down(sender, raw["seq"])
         elif kind == "link_ack" and self.role != "core":
+            if self.hub is not None and sender != self.hub:  # ack de um pedido anterior a outro nó: desfaz
+                self._send_raw({"msg_type": "link_bye", "id": self.node_id, "seq": raw["seq"]}, sender)
+                return
+            self._acked_seq = max(self._acked_seq, raw["seq"]) if sender == self.hub else raw["seq"]
             if self.role == "satellite" and self.flight == "handshake":
                 self.flight = "tandem"
                 self._tandem_end = now + self._rng.uniform(TANDEM_T, 4 * TANDEM_T)
@@ -255,7 +260,7 @@ class SwarmNode(IProtocol):
         # tandem: acompanha o hub pelo beacon dele
         if now >= self._tandem_end or self.hub is None:
             if self.hub is not None:
-                self._send_raw({"msg_type": "link_bye", "id": self.node_id, "seq": self._link_seq}, self.hub)
+                self._send_raw({"msg_type": "link_bye", "id": self.node_id, "seq": self._acked_seq}, self.hub)
                 self._set_hub(None)
             self._enter_patrol(now)
             return self._position

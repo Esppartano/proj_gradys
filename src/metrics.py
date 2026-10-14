@@ -10,6 +10,8 @@ Definições
 - Latência: instante da entrega − `created_at` (relógio global da simulação;
   na prática exigiria relógios sincronizados, ex.: GPS).
 - Tx de dados: todo envio (broadcast ou unicast) que carrega mensagens de dados.
+- Msgs dados tx: mensagens de dados transmitidas, contando cada uma dentro de
+  um lote do DTN (compara a carga útil, já que o DTN agrupa mensagens).
 - Tx de controle: mensagens de controle do protocolo (anúncios de alcance do
   SwCore, vetores de encontro e ACKs do DTN). A camada de enlace/formação
   (beacons e handshake) é igual para todos e fica de fora.
@@ -28,6 +30,7 @@ from src.config import E_RX, E_TX
 class RoutingMetrics:
     created: int = 0
     data_tx: int = 0
+    data_msgs_tx: int = 0
     control_tx: int = 0
     rx: int = 0
     redundant_receptions: int = 0
@@ -65,6 +68,7 @@ class RoutingMetrics:
             "lat_median": median(lat) if lat else float("nan"),
             "hops_mean": mean(hops) if hops else float("nan"),
             "data_tx": self.data_tx,
+            "data_msgs_tx": self.data_msgs_tx,
             "control_tx": self.control_tx,
             "rx": self.rx,
             "tx_per_delivery": tx / delivered if delivered else float("nan"),

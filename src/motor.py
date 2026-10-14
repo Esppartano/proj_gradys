@@ -66,6 +66,7 @@ COLUMNS = [
     ("Lat. mediana(s)", "lat_median", "{:.2f}"),
     ("Saltos médios", "hops_mean", "{:.2f}"),
     ("Tx dados", "data_tx", "{}"),
+    ("Msgs dados tx", "data_msgs_tx", "{}"),
     ("Tx controle", "control_tx", "{}"),
     ("Tx / entrega", "tx_per_delivery", "{:.2f}"),
     ("Rx redund.", "redundant_receptions", "{}"),

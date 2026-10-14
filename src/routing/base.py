@@ -97,19 +97,21 @@ class RoutingMixin:
             )
 
     def _broadcast(self, message: dict, control: bool = False) -> None:
-        self._count_tx(control)
+        self._count_tx(control, 1)
         self.provider.send_communication_command(BroadcastMessageCommand(json.dumps(message)))
 
-    def _unicast(self, message: dict, destination: int, control: bool = False) -> None:
-        self._count_tx(control)
+    def _unicast(self, message: dict, destination: int, control: bool = False, payload: int = 1) -> None:
+        self._count_tx(control, payload)
         self.provider.send_communication_command(SendMessageCommand(json.dumps(message), destination))
 
     @staticmethod
-    def _count_tx(control: bool) -> None:
+    def _count_tx(control: bool, payload: int) -> None:
+        """Conta o pacote; `payload` = nº de mensagens de dados dentro dele (lote DTN > 1)."""
         if control:
             METRICS.control_tx += 1
         else:
             METRICS.data_tx += 1
+            METRICS.data_msgs_tx += payload
 
     def _redundant(self) -> None:
         METRICS.redundant_receptions += 1

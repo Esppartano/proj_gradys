@@ -22,7 +22,7 @@ from src.config import DTN_ACK_TIMEOUT, DTN_BEACON, DTN_BUFFER_SIZE, DTN_HOP_PEN
 from src.metrics import METRICS
 from src.routing import messages as m
 from src.routing.base import RoutingMixin
-from src.scenario import ALL_NODES, label
+from src.scenario import label
 
 
 class DTNMixin(RoutingMixin):
@@ -31,6 +31,9 @@ class DTNMixin(RoutingMixin):
         super().initialize()
         self._buffer: "OrderedDict[str, m.DataMessage]" = OrderedDict()
         self._in_transfer: Dict[str, float] = {}           # id → instante do envio
+        # id → (de quem recebi, quando): reconhece o reenvio por ACK perdido. Não é
+        # permanente: a custódia pode voltar legitimamente a um nó por outro caminho.
+        self._received: Dict[str, Tuple[int, float]] = {}
         self._met: Dict[int, float] = {}                   # nó → instante do último encontro (transitivo)
         self._peer_ages: Dict[int, Tuple[Dict[int, float], float]] = {}  # vizinho → (idades, recebido em)
         self.provider.schedule_timer("dtn_summary", DTN_BEACON + 0.01 * self.node_id)
@@ -109,13 +112,20 @@ class DTNMixin(RoutingMixin):
                 "msg_type": m.BUNDLE,
                 "sender_id": self.node_id,
                 "messages": [self._forward_copy(msg) for msg in batch],
-            }, peer)
+            }, peer, payload=len(batch))
+
+    def _is_resend(self, msg_id: str, sender: int) -> bool:
+        """O mesmo remetente reenviou dentro da janela do ACK (o meu ACK se perdeu)."""
+        entry = self._received.get(msg_id)
+        return (entry is not None and entry[0] == sender
+                and self.provider.current_time() - entry[1] < 2 * DTN_ACK_TIMEOUT)
 
     # ── Eventos ───────────────────────────────────────────────────────────
 
     def handle_timer(self, timer: str) -> None:
         if timer == "dtn_summary":
-            ages = {str(n): self._age(n) for n in ALL_NODES if n != self.node_id and self._age(n) < inf}
+            known = (set(self._met) | set(self._links)) - {self.node_id}  # só nós que este nó já conheceu
+            ages = {str(n): self._age(n) for n in known}
             self._broadcast({"msg_type": m.SUMMARY, "sender_id": self.node_id, "ages": ages}, control=True)
             self.provider.schedule_timer("dtn_summary", self.provider.current_time() + DTN_BEACON)
             self._try_forward()
@@ -143,10 +153,11 @@ class DTNMixin(RoutingMixin):
                 received.append(msg["message_id"])
                 if msg["destination"] == self.node_id:
                     self._deliver(msg)
-                elif msg["message_id"] in self._buffer:
+                elif msg["message_id"] in self._buffer or self._is_resend(msg["message_id"], raw["sender_id"]):
                     self._redundant()
                 else:
                     self._store(msg)
+                    self._received[msg["message_id"]] = (raw["sender_id"], now)
                     self.stats["custody"] += 1
             self._unicast({"msg_type": m.ACK, "sender_id": self.node_id, "ids": received},
                           raw["sender_id"], control=True)
