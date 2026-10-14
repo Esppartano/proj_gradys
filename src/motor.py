@@ -57,32 +57,33 @@ def run(protocol: str, viz: bool) -> Dict[str, float]:
     return summary
 
 
+# (título, chave em METRICS.summary(), formato, legenda)
 COLUMNS = [
-    ("Protocolo", "protocol", "{}"),
-    ("Criadas", "created", "{}"),
-    ("Entregues", "delivered", "{}"),
-    ("PDR%", "pdr", "{:.1f}"),
-    ("Lat. média(s)", "lat_mean", "{:.2f}"),
-    ("Lat. mediana(s)", "lat_median", "{:.2f}"),
-    ("Saltos médios", "hops_mean", "{:.2f}"),
-    ("Tx dados", "data_tx", "{}"),
-    ("Msgs dados tx", "data_msgs_tx", "{}"),
-    ("Tx controle", "control_tx", "{}"),
-    ("Tx / entrega", "tx_per_delivery", "{:.2f}"),
-    ("Rx redund.", "redundant_receptions", "{}"),
-    ("Entregas dupl.", "duplicate_deliveries", "{}"),
-    ("Desc. TTL", "ttl_drops", "{}"),
-    ("Podas zona", "zone_drops", "{}"),
-    ("Expiradas", "expired", "{}"),
-    ("Energia", "energy", "{:.0f}"),
+    ("Protocolo", "protocol", "{}", "Protocolo de roteamento usado."),
+    ("Criadas", "created", "{}", "Mensagens de dados criadas pelos endpoints (satélites e BS); igual em todos."),
+    ("Entregues", "delivered", "{}", "Mensagens que chegaram ao destino (só a primeira chegada conta)."),
+    ("PDR%", "pdr", "{:.1f}", "Taxa de entrega: entregues / criadas × 100. Mede a eficácia."),
+    ("Lat. média(s)", "lat_mean", "{:.2f}", "Tempo médio entre criar e entregar (só das entregues)."),
+    ("Lat. mediana(s)", "lat_median", "{:.2f}", "Mediana desse tempo (menos sensível a extremos)."),
+    ("Saltos médios", "hops_mean", "{:.2f}", "Transmissões de rádio que a mensagem entregue percorreu, em média."),
+    ("Tx dados", "data_tx", "{}", "Pacotes de dados transmitidos (um lote do DTN conta como 1)."),
+    ("Msgs dados tx", "data_msgs_tx", "{}", "Mensagens de dados transmitidas, contando cada uma dentro dos lotes do DTN."),
+    ("Tx controle", "control_tx", "{}", "Pacotes de controle do protocolo: avisos de alcance (SwCore), resumos e ACKs (DTN). Beacons de formação ficam de fora."),
+    ("Tx / entrega", "tx_per_delivery", "{:.2f}", "(Tx dados + Tx controle) / entregues: custo em transmissões de cada entrega. Mede a eficiência."),
+    ("Rx redund.", "redundant_receptions", "{}", "Vezes que um nó recebeu uma mensagem que já tinha visto (desperdício)."),
+    ("Entregas dupl.", "duplicate_deliveries", "{}", "Cópias extras da mesma mensagem que chegaram ao destino."),
+    ("Desc. TTL", "ttl_drops", "{}", "Mensagens descartadas por esgotar o limite de saltos (Flooding/GeoCast)."),
+    ("Podas zona", "zone_drops", "{}", "Retransmissões evitadas por o nó estar fora da zona de encaminhamento (GeoCast)."),
+    ("Expiradas", "expired", "{}", "Mensagens guardadas que passaram do tempo máximo de espera (SwCore)."),
+    ("Energia", "energy", "{:.0f}", "Energia de rádio: 1 por transmissão + 0,5 por recepção (unidades arbitrárias)."),
 ]
 
 
 def _table(results: List[Dict[str, float]]) -> str:
-    lines = ["| " + " | ".join(title for title, _, _ in COLUMNS) + " |",
+    lines = ["| " + " | ".join(title for title, *_ in COLUMNS) + " |",
              "|" + "|".join(" :---: " for _ in COLUMNS) + "|"]
     for r in results:
-        lines.append("| " + " | ".join(fmt.format(r[key]) for _, key, fmt in COLUMNS) + " |")
+        lines.append("| " + " | ".join(fmt.format(r[key]) for _, key, fmt, _ in COLUMNS) + " |")
     return "\n".join(lines)
 
 
@@ -91,6 +92,13 @@ def print_table(results: List[Dict[str, float]]):
     print(_table(results))
 
 
+def _legend() -> str:
+    lines = ["## Legenda", ""]
+    lines += [f"- **{title}**: {legend}" for title, _, _, legend in COLUMNS]
+    return "\n".join(lines)
+
+
 def write_table_to_file(results: List[Dict[str, float]], filename):
+    """Grava a tabela de resultados seguida da legenda das colunas."""
     with open(filename, "w", encoding="utf-8") as f:
-        f.write(_table(results) + "\n")
+        f.write("# Resultados\n\n" + _table(results) + "\n\n" + _legend() + "\n")
