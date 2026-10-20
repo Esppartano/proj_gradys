@@ -61,14 +61,10 @@ TRAFFIC_END = 240.0           # s: deixa ≥ 1 volta para as últimas mensagens 
 # ── Protocolos ─────────────────────────────────────────────────────────────
 FLOOD_TTL = 10                # diâmetro: satélite → ponta → ... → ponta → BS
 
-GEO_DEST_RADIUS = 10.0        # m: zona de entrega em torno da posição prevista do destino
-GEO_ZONE_MARGIN = 8.0         # m: folga da zona de encaminhamento
+GEO_DEST_RADIUS = 10.0        # m: raio da zona-alvo (esfera) em torno da posição prevista do destino
 
-DTN_BEACON = 1.0              # s entre vetores de encontro (controle)
 DTN_BUFFER_SIZE = 200
-DTN_MIN_GAIN = 2.0            # s: o custodiante precisa ter visto o destino há pelo menos isso a menos
-DTN_HOP_PENALTY = 3.0         # s somados à idade aprendida de um vizinho (> DTN_MIN_GAIN)
-DTN_ACK_TIMEOUT = 2.0         # s
+DTN_MSG_TTL = 250.0           # s após a criação: a cópia expira (> 2 voltas do Core)
 
 SWCORE_HOLD_TIME = 150.0      # s que um nó do Core guarda mensagem sem rota (> 1 volta)
 

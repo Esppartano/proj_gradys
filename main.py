@@ -19,9 +19,9 @@ from src.motor import print_table, run, write_table_to_file
 from src.nodes import PROTOCOLS
 
 SCENARIOS = {
-    "1": ("Flooding (supressão de duplicatas + TTL)", "flooding"),
-    "2": ("GeoCast (zona de encaminhamento geográfica)", "geocast"),
-    "3": ("DTN (Store-Carry-Forward por idade de encontro)", "dtn"),
+    "1": ("Flooding (TTL + self-pruning + ACK do receptor)", "flooding"),
+    "2": ("GeoCast (guloso + inundação na zona-alvo)", "geocast"),
+    "3": ("DTN (store-carry-forward, troca completa no encontro)", "dtn"),
     "4": ("SwCore (árvore do Swarm Core + tabela de alcance)", "swcore"),
 }
 BENCHMARK = "5"

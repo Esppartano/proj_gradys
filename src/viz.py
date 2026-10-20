@@ -25,8 +25,8 @@ EVENT_COLORS = {
     "created": (255, 0, 200),      # magenta: criou mensagem
     "forwarded": (0, 255, 255),    # ciano: retransmitiu / repassou
     "handoff": (0, 255, 255),      # ciano: enviou lote de custódia (DTN)
-    "pruned": (70, 70, 80),        # grafite: podou (GeoCast)
-    "ttl_drop": (255, 20, 50),     # vermelho: descartou por TTL
+    "pruned": (70, 70, 80),        # grafite: podou, fora da zona-alvo (GeoCast)
+    "ttl_drop": (255, 20, 50),     # vermelho: descartou (TTL esgotado ou sem rota)
     "delivered": (0, 255, 80),     # verde: recebeu mensagem destinada a ele
     "reach": (120, 255, 120),      # verde-claro: anunciou alcance (SwCore)
     "unreach": (255, 90, 90),      # vermelho-claro: anunciou perda (SwCore)

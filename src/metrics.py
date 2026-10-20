@@ -13,7 +13,7 @@ Definições
 - Msgs dados tx: mensagens de dados transmitidas, contando cada uma dentro de
   um lote do DTN (compara a carga útil, já que o DTN agrupa mensagens).
 - Tx de controle: mensagens de controle do protocolo (anúncios de alcance do
-  SwCore, vetores de encontro e ACKs do DTN). A camada de enlace/formação
+  SwCore, vetores-resumo do DTN, ACKs do receptor no Flooding). A camada de enlace/formação
   (beacons e handshake) é igual para todos e fica de fora.
 - Rx: recepções de pacotes de roteamento (um broadcast conta uma vez por ouvinte).
 - Energia: E_TX·(tx dados + tx controle) + E_RX·rx. A energia de movimento é
@@ -21,7 +21,7 @@ Definições
 """
 from dataclasses import dataclass, field
 from statistics import mean, median
-from typing import Dict, List
+from typing import Dict, List, Set
 
 from src.config import E_RX, E_TX
 
@@ -36,9 +36,12 @@ class RoutingMetrics:
     redundant_receptions: int = 0
     duplicate_deliveries: int = 0
     ttl_drops: int = 0
-    zone_drops: int = 0
+    pruned: int = 0            # retransmissões evitadas (self-pruning / fora da zona-alvo)
+    no_route: int = 0          # GeoCast: sem vizinho que avance (vazio de cobertura)
+    acks_received: int = 0     # Flooding: ACKs que chegaram de volta à origem
     buffer_drops: int = 0
     expired: int = 0
+    expired_ids: Set[str] = field(default_factory=set)  # DTN: ids com cópia vencida
     latencies: Dict[str, float] = field(default_factory=dict)
     hops: Dict[str, int] = field(default_factory=dict)
 
@@ -54,6 +57,11 @@ class RoutingMetrics:
         self.latencies[message_id] = now - message["created_at"]
         self.hops[message_id] = message["hops"]
         return True
+
+    def record_expired(self, message_id: str) -> None:
+        """DTN: uma cópia venceu. No fim só contam as mensagens nunca entregues
+        (várias cópias da mesma mensagem contam uma vez)."""
+        self.expired_ids.add(message_id)
 
     def summary(self) -> Dict[str, float]:
         delivered = len(self.latencies)
@@ -75,9 +83,11 @@ class RoutingMetrics:
             "redundant_receptions": self.redundant_receptions,
             "duplicate_deliveries": self.duplicate_deliveries,
             "ttl_drops": self.ttl_drops,
-            "zone_drops": self.zone_drops,
+            "pruned": self.pruned,
+            "no_route": self.no_route,
+            "acks_received": self.acks_received,
             "buffer_drops": self.buffer_drops,
-            "expired": self.expired,
+            "expired": self.expired + len(self.expired_ids - set(self.latencies)),
             "energy": E_TX * tx + E_RX * self.rx,
         }
 
