@@ -2,3 +2,4 @@ gradys-env/
 __pycache__/
 *.pyc
 logs/
+referencias/

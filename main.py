@@ -20,7 +20,7 @@ from src.nodes import PROTOCOLS
 
 SCENARIOS = {
     "1": ("Flooding (TTL + self-pruning + ACK do receptor)", "flooding"),
-    "2": ("GeoCast (guloso + inundação na zona-alvo)", "geocast"),
+    "2": ("GeoCast (guloso + contorno de vazios + zona-alvo)", "geocast"),
     "3": ("DTN (store-carry-forward, troca completa no encontro)", "dtn"),
     "4": ("SwCore (árvore do Swarm Core + tabela de alcance)", "swcore"),
 }

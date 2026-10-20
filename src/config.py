@@ -62,6 +62,8 @@ TRAFFIC_END = 240.0           # s: deixa ≥ 1 volta para as últimas mensagens 
 FLOOD_TTL = 10                # diâmetro: satélite → ponta → ... → ponta → BS
 
 GEO_DEST_RADIUS = 10.0        # m: raio da zona-alvo (esfera) em torno da posição prevista do destino
+GEO_SEARCH_MARGIN = 20.0      # m: a busca de rota pode recuar até isso além da distância do nó preso
+GEO_SEARCH_TIMEOUT = 0.5      # s esperando resposta da busca (ida e volta de ~10 saltos ≈ 0,2 s)
 
 DTN_BUFFER_SIZE = 200
 DTN_MSG_TTL = 250.0           # s após a criação: a cópia expira (> 2 voltas do Core)

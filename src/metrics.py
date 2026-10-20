@@ -13,8 +13,9 @@ Definições
 - Msgs dados tx: mensagens de dados transmitidas, contando cada uma dentro de
   um lote do DTN (compara a carga útil, já que o DTN agrupa mensagens).
 - Tx de controle: mensagens de controle do protocolo (anúncios de alcance do
-  SwCore, vetores-resumo do DTN, ACKs do receptor no Flooding). A camada de enlace/formação
-  (beacons e handshake) é igual para todos e fica de fora.
+  SwCore, vetores-resumo do DTN, ACKs do receptor no Flooding, buscas e
+  respostas de rota do GeoCast). A camada de enlace/formação (beacons e
+  handshake) é igual para todos e fica de fora.
 - Rx: recepções de pacotes de roteamento (um broadcast conta uma vez por ouvinte).
 - Energia: E_TX·(tx dados + tx controle) + E_RX·rx. A energia de movimento é
   igual em todos os protocolos (mesma mobilidade) e não entra na comparação.
@@ -37,7 +38,8 @@ class RoutingMetrics:
     duplicate_deliveries: int = 0
     ttl_drops: int = 0
     pruned: int = 0            # retransmissões evitadas (self-pruning / fora da zona-alvo)
-    no_route: int = 0          # GeoCast: sem vizinho que avance (vazio de cobertura)
+    no_route: int = 0          # GeoCast: sem vizinho que avance e sem rota pela busca
+    bypasses: int = 0          # GeoCast: vazios contornados pela busca de rota
     acks_received: int = 0     # Flooding: ACKs que chegaram de volta à origem
     buffer_drops: int = 0
     expired: int = 0
@@ -85,6 +87,7 @@ class RoutingMetrics:
             "ttl_drops": self.ttl_drops,
             "pruned": self.pruned,
             "no_route": self.no_route,
+            "bypasses": self.bypasses,
             "acks_received": self.acks_received,
             "buffer_drops": self.buffer_drops,
             "expired": self.expired + len(self.expired_ids - set(self.latencies)),

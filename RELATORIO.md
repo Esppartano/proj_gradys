@@ -160,8 +160,18 @@ Encaminha "na direção" do destino, como no slide e em Choi et al.:
 3. Senão, **guloso**: unicast ao vizinho mais perto do destino, desde que mais
    perto que o próprio nó. A posição dos vizinhos vem dos beacons; as
    distâncias são em 3D.
-4. Se nenhum vizinho avança (vazio de cobertura), descarta ("sem rota"). Não
-   há armazenamento nos intermediários.
+4. Se nenhum vizinho avança (**mínimo local**, ou vazio de cobertura), faz a
+   **busca de rota** de Choi et al. (seção II.B), que corresponde ao "contornar
+   áreas sem cobertura (se possível)" do slide:
+   - difunde uma busca (controle) que se propaga salto a salto só por nós da
+     região na direção do destino: a até a distância do nó preso + 20 m, com
+     até 10 saltos;
+   - o primeiro nó mais perto do destino que o nó preso responde pelo caminho
+     inverso;
+   - os dados seguem esse caminho, e a partir de quem respondeu o guloso
+     recomeça.
+5. Sem resposta em 0,5 s, descarta ("sem rota"). Não há armazenamento nos
+   intermediários.
 
 A posição do destino vem do **plano**: o ponto do setor do satélite ou o
 centro, para a BS. Ela erra quando o satélite está em tandem, longe do setor.
@@ -228,11 +238,12 @@ Definidas em `src/metrics.py`; a legenda completa está em `results.md`.
 - **Latência** média e mediana; **saltos médios**.
 - **Tx dados:** pacotes de dados. **Msgs dados tx:** mensagens transmitidas,
   contando cada uma dentro dos lotes do DTN, para comparar a carga útil.
-- **Tx controle:** anúncios do SwCore, vetores-resumo do DTN e ACKs do
-  receptor no Flooding.
+- **Tx controle:** anúncios do SwCore, vetores-resumo do DTN, ACKs do
+  receptor no Flooding e buscas e respostas de rota do GeoCast.
 - **Podas:** retransmissões evitadas (self-pruning no Flooding; nó fora da
-  zona-alvo no GeoCast). **Sem rota:** descartes do GeoCast por vazio de
-  cobertura. **ACKs origem:** confirmações que voltaram à origem no Flooding.
+  zona-alvo no GeoCast). **Contornos:** vazios contornados pela busca de rota
+  do GeoCast. **Sem rota:** descartes do GeoCast num vazio que a busca não
+  contornou. **ACKs origem:** confirmações que voltaram à origem no Flooding.
 - **Tx / entrega:** custo em transmissões por entrega (eficiência).
 - **Energia:** 1 por transmissão + 0,5 por recepção (unidades arbitrárias).
 
@@ -247,22 +258,24 @@ Gerada por `python main.py 5`; reproduzida de `results.md`.
 | Protocolo | PDR | Lat. média | Saltos | Tx dados | Msgs dados tx | Tx controle | Tx / entrega | Rx redund. | Entregas dupl. | Energia | Energia / entrega |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | Flooding | 26,7% | 39,4 s | 5,43 | 1365 | 1365 | 313 | 38,1 | 1553 | 42 | 3664 | 83,3 |
-| GeoCast | 24,2% | 43,3 s | 5,28 | 607 | 607 | 0 | 15,2 | 8 | 0 | 914 | 22,9 |
+| GeoCast | 26,7% | 39,4 s | 5,48 | 778 | 778 | 1320 | 47,7 | 8 | 0 | 3964 | 90,1 |
 | DTN | **100%** | **77,9 s** | 4,68 | 663 | 1967 | 1536 | 13,3 | 100 | 0 | 3748 | 22,7 |
 | **SwCore** | **100%** | 81,5 s | 6,22 | 1026 | 1026 | 224 | **7,6** | 0 | 0 | 1875 | **11,4** |
 
 Tx / entrega = (Tx dados + Tx controle) / entregues. No DTN, os 663 pacotes de
 dados são lotes com 1967 mensagens no total.
 
-Extras: o Flooding fez 499 podas (self-pruning) e recebeu os 44 ACKs; o
-GeoCast descartou 120 mensagens por falta de rota.
+Extras:
+- o Flooding fez 499 podas (self-pruning) e recebeu os 44 ACKs;
+- o GeoCast fez 158 buscas de rota: 42 contornaram o vazio e 116 não acharam
+  rota.
 
 ### 7.2 Entrega por tipo de fluxo
 
 | Protocolo | Sat → Sat (91) | Sat → BS (40) | BS → Sat (34) |
 |---|---|---|---|
 | Flooding | 0 | 39 (44,4 s) | 5 (0,1 s) |
-| GeoCast | 0 | 39 (44,4 s) | 1 (0,0 s) |
+| GeoCast | 0 | 39 (44,4 s) | 5 (0,1 s) |
 | DTN | 91 (101,1 s) | 40 (46,0 s) | 34 (53,1 s) |
 | SwCore | 91 (104,1 s) | 40 (51,3 s) | 34 (56,7 s) |
 
@@ -303,31 +316,43 @@ Cada célula mostra as mensagens entregues e, entre parênteses, a latência mé
   implementação: quem acabou de enviar um pacote ao nó também conta como
   vizinho na poda. Um satélite pode transmitir antes de o seu primeiro beacon
   chegar, e sem essa regra um ACK era podado por engano.
-- **GeoCast guloso:** é o mais barato em transmissões (607 de dados, nenhum
-  controle) e tem só 8 recepções redundantes, como prevê o slide ("muito
-  menos retransmissões que o Flooding"). Mas entrega menos (24,2%):
-  - 120 mensagens morreram em **vazios de cobertura**, onde nenhum vizinho
-    está mais perto do destino que o próprio nó (o "e se a zona de
-    encaminhamento for esparsa?" do slide). Contagem em `logs/geocast.log`:
+- **GeoCast:** ilustra as duas condições do slide, posição precisa e
+  mobilidade limitada. Medi o protocolo **sem** e **com** o contorno de
+  vazios de Choi et al.:
 
-    | Onde | Sat → Sat | BS → Sat |
-    |---|---|---|
-    | BS | 29 | 17 |
-    | C9 (ponta interna) | 21 | 7 |
-    | Satélites em tandem | 20 | — |
-    | C1 (ápice) | 12 | 1 |
-    | Outros nós do Core | 8 | 5 |
+  | GeoCast | Entregues | Tx dados | Tx controle | Energia | Energia / entrega |
+  |---|---|---|---|---|---|
+  | Só guloso (sem contorno) | 40 (24,2%) | 607 | 0 | 914 | 22,9 |
+  | Com contorno (versão final) | 44 (26,7%) | 778 | 1320 | 3964 | 90,1 |
 
-  - **Sat → Sat atraídas para o centro:** ao descer a asa interna, a BS, no
-    centro, fica mais perto de um setor oposto do que qualquer nó do Core.
-    O guloso entrega a mensagem a ela, e dali nenhum vizinho avança;
-  - **comandos BS → satélite:** só 1 dos 34 chegou. 17 morreram na própria BS
-    (os vizinhos dela, C7–C9, estavam mais longe do setor do que ela), 13 na
-    asa interna ou no Core, e 3 entraram **cedo demais na zona-alvo**. Para S3
-    e S4, cujo setor fica no raio do ápice (25 m), a ponta C9 chega a ≈ 7,4 m
-    da posição prevista, dentro da esfera de 10 m mas fora do alcance de
-    rádio; a inundação local então morre na asa interna;
-  - ilustra as duas condições do slide: posição precisa e mobilidade limitada.
+  - **Sem contorno**, é o mais barato de todos e tem só 8 recepções
+    redundantes, como prevê o slide ("muito menos retransmissões que o
+    Flooding"). Mas 120 mensagens morrem em vazios: na ponta do V, no ápice ou
+    na própria BS, que no centro fica mais perto de um setor oposto do que
+    qualquer nó da asa interna.
+  - **Com contorno**, houve 158 buscas de rota: 120 mensagens travaram uma
+    vez, e 38 delas travaram de novo depois do contorno. 42 buscas acharam
+    caminho, e só **4 dessas mensagens foram entregues** (comandos BS →
+    satélite). As outras 38, todas entre satélites, morreram mais adiante,
+    porque o destino estava isolado e não havia caminho nenhum até ele.
+  - **"Falso contorno" pela BS:** em 30 dos 42 contornos, quem respondeu à
+    busca foi a BS. Ela está mais perto do destino que o nó preso, que é a
+    regra de Choi et al. para responder, mas no centro ela também é um mínimo
+    local: os seus vizinhos (C7–C9) estão todos mais longe. A mensagem trava
+    de novo na BS logo em seguida. É um efeito da geometria do cenário (V
+    girando em torno da BS), não um defeito da regra.
+  - **Geometria contra topologia:** o GeoCast decide pela distância
+    geométrica, e a BS, no centro, está geometricamente perto do destino,
+    mas é topologicamente um beco sem saída. O SwCore conhece a topologia da
+    árvore e, sem rota, guarda a mensagem em vez de inundar buscas inúteis.
+  - **Contornar só ajuda se existe caminho.** O ganho foi de 4 entregas,
+    igualando o Flooding (44), a um custo ≈ 4× maior em energia: as buscas
+    inundam a região a cada mínimo local. É o "e se a zona de encaminhamento
+    for esparsa e não houver rota completa?" do slide.
+  - **Posição prevista:** 3 comandos para S3/S4 ainda entram cedo demais na
+    zona-alvo pela ponta C9, que chega a ≈ 7,4 m da posição prevista (dentro
+    da esfera de 10 m, mas fora do alcance de rádio). A inundação local então
+    morre na asa interna.
 
 ---
 
@@ -357,6 +382,10 @@ Cada célula mostra as mensagens entregues e, entre parênteses, a latência mé
   entregas duplicadas), aviso de entrega que não saía do destino no DTN, poda
   indevida do ACK no Flooding e entrega direta também no modo zona-alvo do
   GeoCast.
+- **Contorno de vazios no GeoCast:** acrescentado depois de ler Choi et al.,
+  para seguir a referência e o slide. A previsão de posição dos vizinhos pela
+  velocidade (Eq. 1 de Choi et al.) não foi implementada: os beacons levam só
+  a posição, e o Core se move devagar (≈ 0,9 a 2,2 m/s, da ponta interna à externa).
 
 ---
 

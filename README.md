@@ -6,7 +6,7 @@ roteamento num enxame de drones simulado no [GrADySim](https://github.com/Projec
 | Protocolo | Ideia |
 |---|---|
 | **Flooding** | Inundação por broadcast com TTL, *self-pruning* e ACK do receptor |
-| **GeoCast** | Encaminhamento guloso até a zona-alvo e inundação local dentro dela |
+| **GeoCast** | Encaminhamento guloso até a zona-alvo, busca de rota para contornar vazios e inundação local dentro da zona |
 | **DTN** | Store-carry-forward, com troca completa de mensagens a cada encontro |
 | **SwCore** | Rota pela árvore geradora do Swarm Core, com tabela de alcance por destino (satélites e BS) |
 

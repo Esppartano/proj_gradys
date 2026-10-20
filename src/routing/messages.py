@@ -9,11 +9,13 @@ Position = Tuple[float, float, float]
 DATA = "routing_data"      # mensagem de dados (Flooding / GeoCast / SwCore)
 BUNDLE = "dtn_bundle"      # lote de mensagens em transferência de custódia (DTN)
 SUMMARY = "dtn_summary"    # vetor-resumo: ids que tenho + ids já entregues (DTN)
+GEO_SEARCH = "geo_search"  # busca de rota para contornar mínimo local (GeoCast)
+GEO_REPLY = "geo_reply"    # resposta da busca, pelo caminho inverso (GeoCast)
 FLOOD_ACK = "flood_ack"    # confirmação do receptor, inundada de volta à origem (Flooding)
 REACH = "sw_reach"         # anúncio de alcance de um endpoint (SwCore)
 UNREACH = "sw_unreach"     # anúncio de perda de alcance (SwCore)
 
-CONTROL_TYPES = {SUMMARY, FLOOD_ACK, REACH, UNREACH}
+CONTROL_TYPES = {SUMMARY, FLOOD_ACK, GEO_SEARCH, GEO_REPLY, REACH, UNREACH}
 ROUTING_TYPES = {DATA, BUNDLE} | CONTROL_TYPES
 
 
@@ -33,6 +35,7 @@ class DataMessage(TypedDict, total=False):
     # GeoCast
     dest_pos: Position      # posição prevista do destino pelo plano compartilhado
     mode: str               # "greedy" (a caminho) ou "zone" (inundação na zona-alvo)
+    route: List[int]        # caminho achado pela busca de rota (contorno de vazio)
 
 
 class BundleMessage(TypedDict):
