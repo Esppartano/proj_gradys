@@ -1,6 +1,6 @@
-# T1 — Roteamento num Swarm Core em V (GrADySim)
+# T1 — Roteamento Swarm Core em Topologia V (GrADySim)
 
-Trabalho T1 da disciplina INF2541 (PUC-Rio). Compara quatro protocolos de
+T1 da disciplina INF2541 (PUC-Rio). Compara quatro protocolos de
 roteamento num enxame de drones simulado no [GrADySim](https://github.com/Project-GrADyS/gradys-sim-nextgen):
 
 | Protocolo | Ideia |
