@@ -1,12 +1,12 @@
-# Relatório — T1: Roteamento num Swarm Core em V
+# Relatório — T1: Roteamento Swarm Core em Topologia V
 
-**Disciplina:** INF2541 · **Simulador:** GrADySim 0.8.0 · **Branch:** `T1`
+**Disciplina:** INF2541 · **Simulador:** GrADySim 0.8.0
 
 ---
 
 ## 1. Objetivo e hipótese
 
-Comparar três métodos clássicos de roteamento em FANETs — **DTN**, **Flooding** e
+Comparar três métodos clássicos de roteamento em Flying Ad-Hoc Network (FANETs) — **DTN**, **Flooding** e
 **GeoCast** — com o **SwCore**, que roteia pela árvore geradora de um *Swarm Core*.
 
 **Hipótese:** o SwCore é
@@ -101,10 +101,10 @@ volta completa do Core para ser entregue.
 
 | Princípio | Como foi atendido |
 |---|---|
-| **Descentralização** (sem conhecimento ou ordens globais) | Nenhum nó consulta posição ou estado de outro nó, a não ser pelo que recebe por rádio dos vizinhos. O antigo registro global de posições (`LOCATIONS`) foi removido. |
+| **Descentralização** (sem conhecimento ou ordens globais) | Nenhum nó consulta posição ou estado de outro nó, a não ser pelo que recebe por rádio dos vizinhos. |
 | **Sensoriamento e comunicação local** | Beacons de enlace com alcance de 6 m; tabelas montadas só com o que é ouvido ou anunciado pelos vizinhos. |
 | **Plano compartilhado** (Informações fornecidas previamente) | Topologia em V, padrão de rotação (centro e vel. angular ω), setor de cada nó satélite e posição de BS.|
-| **Líder só de mobilidade** | C1 voa pelo plano; cada nó segue o seu pai na árvore. O líder não tem papel especial na transmissão de mensagens. |
+| **Papel do Líder na formação** | C1 voa pelo plano; cada nó segue o seu pai na árvore. O líder não tem papel especial na transmissão de mensagens, apenas é o nó de referência a ser seguido. |
 | **Escalabilidade e robustez** | Atualizações de alcance só por eventos (conexão e desconexão); entrega diferida quando o destino está fora; nós vizinhos servem de *backup*. |
 
 ---
@@ -373,42 +373,13 @@ Cada célula mostra as mensagens entregues e, entre parênteses, a latência mé
   Flooding, guloso com zona-alvo no GeoCast, troca completa no encontro no DTN. A versão
   anterior do DTN (idade de encontro, estilo FRESH/PRoPHET) foi removida por
   não constar no slide nem na referência.
-- **Validação cruzada:** o código e o plano dessas mudanças foram revisados por
-  um segundo agente (agy) e as correções procedentes foram aplicadas: ordem de
-  decisão do SwCore, `seq` do handshake, contagem de mensagens expiradas,
-  métrica de mensagens transmitidas, gatilho do vetor-resumo no Core sempre
-  conectado e entrega direta ao destino no GeoCast. A revisão da
-  implementação corrigiu ainda: reenvio duplicado de lotes no DTN (zerou as
-  entregas duplicadas), aviso de entrega que não saía do destino no DTN, poda
-  indevida do ACK no Flooding e entrega direta também no modo zona-alvo do
-  GeoCast.
 - **Contorno de vazios no GeoCast:** acrescentado depois de ler Choi et al.,
   para seguir a referência e o slide. A previsão de posição dos vizinhos pela
   velocidade (Eq. 1 de Choi et al.) não foi implementada: os beacons levam só
   a posição, e o Core se move devagar (≈ 0,9 a 2,2 m/s, da ponta interna à externa).
 
----
 
-## 10. Limitações e trabalhos futuros
-
-- **Uma única semente.** O próximo passo é rodar várias sementes de tráfego e
-  mobilidade e reportar média e desvio.
-- **Nós saindo e entrando na formação** (falha ou ronda) não foram simulados. A
-  cascata e os anúncios com `seq` já permitem isso, mas não foi testado.
-- **Rádio da BS simétrico:** supõe antena e recepção melhores na estação base.
-- **Energia só de rádio:** a de movimento é igual para todos e ficou de fora.
-- **Unicast sem confirmação no SwCore:** um pacote enviado a um satélite que
-  acabou de sair do alcance se perderia. Nesta execução não houve perdas.
-- **Pergunta aberta do enunciado** (que topologia serve para que tarefa): o V
-  oferece três extremidades naturais de acesso (as duas pontas e o ápice) e
-  caminhos longos entre elas, até 8 saltos. Isso favorece tarefas com grupos
-  fixos de satélites por lado. Topologias mais compactas, como estrela e anel,
-  reduziriam o diâmetro. Comparar com as topologias dos colegas responderia
-  melhor.
-
----
-
-## 11. Como reproduzir
+## 10. Como reproduzir
 
 ```bash
 python main.py              # menu interativo
@@ -420,7 +391,7 @@ python main.py 3 2          # DTN em modo rápido (sem browser)
 - Logs de eventos: `logs/<protocolo>.log`.
 - Parâmetros: todos em `src/config.py`.
 
-## 12. Estrutura do código
+## 11. Estrutura do código
 
 | Arquivo | Conteúdo |
 |---|---|
