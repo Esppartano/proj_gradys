@@ -31,9 +31,9 @@ from gradysim.protocol.messages.telemetry import Telemetry
 
 from src.config import (
     CONTACT_DWELL, CONTACT_GAP, CORE_SPEED, DOCK_CAPTURE, LINK_BEACON, LINK_TIMEOUT, ROTATION_OMEGA,
-    SATELLITE_PAIRS, SATELLITE_SPEED, TRAFFIC_END,
+    SATELLITE_PAIRS, SATELLITE_SPEED,
 )
-from src import eventlog, scenario as sc
+from src import config, eventlog, scenario as sc
 
 CORE_STEP = 0.2               # s entre comandos de mobilidade do Core
 SATELLITE_STEP = 0.2          # s entre decisões de mobilidade do satélite
@@ -243,7 +243,7 @@ class SwarmNode(IProtocol):
 
     def _create_message(self, now: float) -> None:
         """Cada acoplamento gera uma mensagem para o satélite do eixo oposto."""
-        if now > TRAFFIC_END:
+        if now > config.TRAFFIC_END:  # lido na hora: o motor ajusta para a duração do modo 3D
             return
         self._encounters += 1
         destination = SATELLITE_PAIRS[self.node_id]

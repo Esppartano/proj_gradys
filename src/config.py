@@ -14,13 +14,22 @@ Geometria (ver `scenario.py`), segundo as convenções da disciplina:
 """
 from math import pi, radians
 
-# ── Simulação ──────────────────────────────────────────────────────────────
-ROTATION_PERIOD = 60.0        # s por volta (60 unidades de simulação)
-TURNS = 10                    # voltas simuladas
+# ── Simulação: duração e velocidade (ajuste aqui) ──────────────────────────
+# 1 volta da formação = ROTATION_PERIOD s simulados = 1 min simulado.
+# Logo, TURNS é também a duração em minutos simulados (ex.: TURNS = 60 → 60 min).
+# A última volta de cada execução só entrega as pendentes (sem mensagens novas),
+# então são necessárias pelo menos 2 voltas para haver mensagens.
+ROTATION_PERIOD = 60.0        # s simulados por volta (60 unidades de simulação)
+TURNS = 60                    # voltas no modo rápido (python main.py 5: benchmark e resultados)
+VIZ_TURNS = 60                # voltas no modo 3D (python main.py <1-4> 1)
+VIZ_SPEEDUP = 30.0            # modo 3D: fator de aceleração do tempo na tela.
+                              #   1.0 = tempo real (1 volta por minuto); 5.0 = 5× (1 volta em 12 s).
+                              #   Não muda a física nem os resultados, só a espera entre eventos.
+                              #   O modo rápido não espera o relógio: já roda o mais rápido possível.
 SIMULATION_DURATION = TURNS * ROTATION_PERIOD
-TRAFFIC_END = SIMULATION_DURATION - ROTATION_PERIOD  # última volta: só entrega, sem mensagens novas
+VIZ_DURATION = VIZ_TURNS * ROTATION_PERIOD
+TRAFFIC_END = SIMULATION_DURATION - ROTATION_PERIOD  # o motor recalcula para cada execução
 MOBILITY_UPDATE = 0.05        # s entre atualizações de posição (telemetria)
-VIZ_SPEEDUP = 1.0             # modo 3D em tempo real (1 volta por minuto)
 
 # ── Rádio ──────────────────────────────────────────────────────────────────
 L = 20.0                      # m entre vizinhos diretos na formação
@@ -62,5 +71,5 @@ E_RX = 0.5
 
 # ── Visualização (modo 3D) ─────────────────────────────────────────────────
 EVENT_LOG = True
-EVENT_HIGHLIGHT_S = 1.5       # s simulados que a cor de um evento dura na tela
+EVENT_HIGHLIGHT_S = 1.5 * VIZ_SPEEDUP  # s simulados = ≈ 1,5 s na tela, qualquer que seja o fator
 VIZ_NODE_SIZE = 4.0

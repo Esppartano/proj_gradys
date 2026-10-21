@@ -43,7 +43,7 @@ disciplina, para permitir comparar as formações entre os trabalhos.
 | Extremidades | As duas pontas, C5 e C9, a 68,6 m do centro | Simétricas em relação ao eixo do V; o ápice fica a 25,5 m |
 | Árvore geradora | As 8 arestas do V | C1–C2–C3–C4–C5 e C1–C6–C7–C8–C9 |
 
-**Rigidez medida** (SwCore, 10 voltas): arestas da árvore entre **19,93 e 20,09 m**;
+**Rigidez medida** (SwCore, 60 voltas): arestas da árvore entre **19,90 e 20,10 m**;
 pares não vizinhos sempre a **≥ 32,76 m**, fora do alcance de 30 m.
 
 ### 2.3 Satélites
@@ -69,8 +69,8 @@ apenas enquanto estão acoplados, recebem só as mensagens destinadas a eles e
 não repassam nem guardam as de outros.
 
 Como a formação gira em torno do próprio centro, **as duas pontas varrem o
-perímetro** e passam por cada eixo uma vez por volta. Em 10 voltas houve **80
-acoplamentos**: cada satélite acoplou 10 vezes no C5 e 10 vezes no C9,
+perímetro** e passam por cada eixo uma vez por volta. Em 60 voltas houve **480
+acoplamentos**: cada satélite acoplou 60 vezes no C5 e 60 vezes no C9,
 alternando. As pontas estão separadas por ≈ 145° no giro, então as passagens
 por um eixo se alternam a cada ≈ 24 s e ≈ 36 s.
 
@@ -79,9 +79,9 @@ por um eixo se alternam a cada ≈ 24 s e ≈ 36 s.
 - **Pares opostos:** S1 ↔ S3 (leste–oeste) e S2 ↔ S4 (norte–sul).
 - **Uma mensagem por acoplamento**, criada na hora do contato para o satélite
   do eixo oposto.
-- **10 voltas simuladas** (10 min). Na última volta não há mensagens novas, só
-  entrega das pendentes: são **72 mensagens** no total (8 acoplamentos por
-  volta, em 9 voltas).
+- **60 voltas simuladas** (60 min). Na última volta não há mensagens novas, só
+  entrega das pendentes: são **472 mensagens** no total (8 acoplamentos por
+  volta, em 59 voltas).
 
 ---
 
@@ -114,8 +114,9 @@ custo é o mesmo em todos os protocolos.
   entrega ao hub; troca mensagens apenas com o hub e só recebe as destinadas a
   ele. O nó do Core só troca mensagens com um satélite acoplado a ele. A regra
   vale igual para os 4 protocolos.
-- **Ritmo do modo 3D** (`src/pacing.py`): o visualizador roda em tempo real
-  (uma volta por minuto). O `real_time` do GrADySim espera antes de cada
+- **Ritmo do modo 3D** (`src/pacing.py`): o visualizador acelera o tempo pelo
+  fator `VIZ_SPEEDUP` (30×: os 60 min simulados passam em 2 min; medi ≈ 29,8×
+  sem o browser aberto). O `real_time` do GrADySim espera antes de cada
   evento e acumula atraso (pedindo 30×, medi só ≈ 5×); por isso criei um
   controle de ritmo com prazos absolutos, que segue o fator pedido.
 
@@ -195,17 +196,17 @@ por destino** (cada satélite), com o `seq` do handshake:
 
 | Estado | Significado |
 |---|---|
-| **Direct** | O satélite fez handshake comigo (sou o hub) |
+| **AbleToDeliverDirectly** | O satélite fez handshake comigo (sou o hub): entrego direto |
 | **NextHop(Uy)** | Repasso pelo vizinho Uy da árvore |
 | **Unreachable** | Ninguém o alcança agora: guardo a mensagem |
 
-- **Conexão:** o hub marca Direct e envia `REACH(ep, seq)` pela árvore. Cada
+- **Conexão:** o hub marca AbleToDeliverDirectly e envia `REACH(ep, seq)` pela árvore. Cada
   receptor faz `tabela[ep] = remetente` e repassa aos outros vizinhos da árvore.
   Não há laços, porque a topologia é uma árvore.
 - **Desconexão:** o hub envia `UNREACH(ep, seq)`. Anúncios com `seq` menor que o
   da tabela são descartados.
 - **Encaminhamento, nesta ordem:**
-  1. Direct → entrega ao satélite;
+  1. AbleToDeliverDirectly → entrega ao satélite;
   2. NextHop → repassa;
   3. Unreachable → **guarda**, sem prazo (armazenamento ilimitado), até
      chegar um REACH do destino.
@@ -243,30 +244,30 @@ Definidas em `src/metrics.py`; a legenda completa está em `results.md`.
 
 ## 7. Resultados
 
-Gerados por `python main.py 5` (10 voltas, 72 mensagens); reproduzidos de
+Gerados por `python main.py 5` (60 voltas, 472 mensagens); reproduzidos de
 `results.md`.
 
 | Protocolo | PDR | Lat. média | Lat. mediana | Saltos | Tx dados | Msgs dados tx | Tx controle | Tx / entrega | Rx redund. | Energia | Energia / entrega |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| Flooding | 0% | n/d | n/d | n/d | 648 | 648 | 0 | n/d | 504 | 1332 | n/d |
-| GeoCast | 0% | n/d | n/d | n/d | 576 | 576 | 504 | n/d | 0 | 1836 | n/d |
-| DTN | **100%** | 17,9 s | 17,9 s | 6,00 | 685 | 720 | 1932 | 36,3 | 0 | 4508 | 62,6 |
-| **SwCore** | **100%** | 18,0 s | 18,0 s | 6,00 | 432 | 432 | 1280 | **23,8** | 0 | **2568** | **35,7** |
+| Flooding | 0% | n/d | n/d | n/d | 4248 | 4248 | 0 | n/d | 3304 | 8732 | n/d |
+| GeoCast | 0% | n/d | n/d | n/d | 3776 | 3776 | 3304 | n/d | 0 | 12036 | n/d |
+| DTN | **100%** | 18,0 s | 17,9 s | 6,00 | 4485 | 4720 | 12514 | 36,0 | 0 | 29280 | 62,0 |
+| **SwCore** | **100%** | 18,0 s | 18,0 s | 6,00 | 2832 | 2832 | 7680 | **22,3** | 0 | **15768** | **33,4** |
 
-Tx / entrega = (Tx dados + Tx controle) / entregues. No DTN, os 685 pacotes de
-dados são lotes com 720 mensagens no total.
+Tx / entrega = (Tx dados + Tx controle) / entregues. No DTN, os 4485 pacotes de
+dados são lotes com 4720 mensagens no total.
 
 **Latência por caminho** (SwCore e DTN, iguais):
 
 | Caminho | Mensagens | Latência | Saltos |
 |---|---|---|---|
-| A outra ponta chega primeiro ao satélite oposto: atravessa a árvore | 36 | ≈ 6 s | 10 |
-| A mesma ponta chega primeiro, meia volta depois | 36 | ≈ 30 s | 2 |
+| A outra ponta chega primeiro ao satélite oposto: atravessa a árvore | 236 | ≈ 6 s | 10 |
+| A mesma ponta chega primeiro, meia volta depois | 236 | ≈ 30 s | 2 |
 
 Extras:
-- o Flooding fez 72 podas (self-pruning) e nenhum ACK voltou, porque nenhuma
+- o Flooding fez 472 podas (self-pruning) e nenhum ACK voltou, porque nenhuma
   mensagem chegou ao destino;
-- o GeoCast fez 72 buscas de rota, todas sem resposta (72 descartes sem rota).
+- o GeoCast fez 472 buscas de rota, todas sem resposta (472 descartes sem rota).
 
 ---
 
@@ -274,9 +275,9 @@ Extras:
 
 - **A hipótese se confirma em parte.** O SwCore entrega 100%, tanto quanto o
   DTN, e é o mais **eficiente**:
-  - **≈ 1,5× menos transmissões por entrega** que o DTN (23,8 contra 36,3);
-  - **≈ 1,8× menos energia** que o DTN (2568 contra 4508) e a **menor energia
-    por entrega** (35,7 contra 62,6);
+  - **≈ 1,6× menos transmissões por entrega** que o DTN (22,3 contra 36,0);
+  - **≈ 1,9× menos energia** que o DTN (15768 contra 29280) e a **menor energia
+    por entrega** (33,4 contra 62,0);
   - **mas não tem menor latência:** os dois entregam cada mensagem no mesmo
     instante, quando a primeira ponta chega ao satélite oposto. Nenhum
     protocolo consegue adiantar isso; a latência é dada pela geometria.
@@ -290,22 +291,22 @@ Extras:
   - **a outra metade** sai por uma ponta que é ela mesma a primeira a chegar
     ao satélite oposto, meia volta depois (≈ 30 s, 2 saltos).
 - **O custo do DTN é a replicação:** cada mensagem é transmitida 10 vezes
-  (720 contra 432 do SwCore), porque é copiada para os 9 nós do Core, e o DTN
-  troca 1932 vetores-resumo. O SwCore guarda uma única cópia e só a move pela
-  árvore quando o destino aparece; o seu controle só ocorre em eventos: 160
-  anúncios (80 conexões e 80 desconexões) × 8 arestas = 1280 transmissões.
-- **Flooding e GeoCast não atravessam partições:** entregam 0 das 72
+  (4720 contra 2832 do SwCore), porque é copiada para os 9 nós do Core, e o DTN
+  troca 12514 vetores-resumo. O SwCore guarda uma única cópia e só a move pela
+  árvore quando o destino aparece; o seu controle só ocorre em eventos: 960
+  anúncios (480 conexões e 480 desconexões) × 8 arestas = 7680 transmissões.
+- **Flooding e GeoCast não atravessam partições:** entregam 0 das 472
   mensagens. O par de satélites nunca está conectado ao mesmo tempo, e sem
   armazenamento no caminho a mensagem não espera o destino. É o "Network
   partitions are never bridged" do slide.
 - **Flooding:** cada inundação percorre o V inteiro (9 transmissões por
-  mensagem; 504 recepções redundantes) e morre na ponta oposta. O
+  mensagem; 3304 recepções redundantes) e morre na ponta oposta. O
   self-pruning poda a retransmissão inútil dessa ponta, que só tem um
-  vizinho (72 podas, uma por mensagem).
+  vizinho (472 podas, uma por mensagem).
 - **GeoCast:** o guloso leva a mensagem pelo V até o nó mais perto do ponto
   do satélite oposto (C8 ou C4, conforme a ponta de saída). Dali nenhum
   vizinho chega mais perto e o destino está fora do alcance: a busca de rota
-  não acha ninguém, e as 72 mensagens são descartadas. É o "e se a zona de
+  não acha ninguém, e as 472 mensagens são descartadas. É o "e se a zona de
   encaminhamento for esparsa e não houver rota completa?" do slide.
 - **Geometria contra topologia:** o GeoCast decide pela distância geométrica
   e leva a mensagem para onde o destino está agora, que é vazio. O SwCore não
@@ -340,7 +341,7 @@ Extras:
   mensagem tenha de atravessar a formação.
 - **Satélites só origem e destino:** trocam mensagens só com o hub, durante o
   acoplamento, e recebem só as destinadas a eles (seção 2.3). Por isso o
-  SwCore entrega sempre pelo estado Direct, no hub.
+  SwCore entrega sempre pelo estado AbleToDeliverDirectly, no hub.
 - **Formação sem o plugin do GrADySim:** `MobilityLeader/FollowerPlugin` usa
   deslocamentos em eixos fixos (não giram com o V) e segue o primeiro líder que
   ouvir, o que é ambíguo numa cascata. Por isso, a formação usa os próprios
@@ -361,7 +362,7 @@ Extras:
 ```bash
 python main.py              # menu interativo
 python main.py 5            # benchmark dos 4 protocolos (gera results.md e logs/)
-python main.py 4 1          # SwCore no visualizador 3D (tempo real: 1 volta por minuto)
+python main.py 4 1          # SwCore no visualizador 3D (30× mais rápido: 60 min em 2 min)
 python main.py 3 2          # DTN em modo rápido (sem browser)
 ```
 

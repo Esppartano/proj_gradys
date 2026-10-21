@@ -11,7 +11,11 @@ from gradysim.simulator.handler.timer import TimerHandler
 from gradysim.simulator.handler.visualization import VisualizationConfiguration, VisualizationHandler
 from gradysim.simulator.simulation import SimulationBuilder, SimulationConfiguration
 
-from src.config import AWAY_DISTANCE, COMM_DELAY, COMM_RANGE, MOBILITY_UPDATE, SIMULATION_DURATION, VIZ_SPEEDUP
+from src import config
+from src.config import (
+    AWAY_DISTANCE, COMM_DELAY, COMM_RANGE, MOBILITY_UPDATE, ROTATION_PERIOD, SIMULATION_DURATION,
+    VIZ_DURATION, VIZ_SPEEDUP,
+)
 from src import eventlog
 from src.metrics import METRICS
 from src.nodes import make_node
@@ -22,12 +26,17 @@ from src.scenario import ALL_NODES, DOCK_RADIUS, initial_position
 def run(protocol: str, viz: bool) -> Dict[str, float]:
     """Roda um cenário e grava o log de eventos em logs/<protocolo>.log."""
     METRICS.reset()
+    duration = VIZ_DURATION if viz else SIMULATION_DURATION
+    if duration < 2 * ROTATION_PERIOD:
+        print(f"\n[AVISO] {duration / ROTATION_PERIOD:.0f} volta(s): a última volta só entrega, então "
+              "nenhuma mensagem será criada. Use pelo menos 2 (TURNS / VIZ_TURNS em src/config.py).\n")
+    config.TRAFFIC_END = duration - ROTATION_PERIOD  # última volta: só entrega
     log_path = eventlog.open_log(
         protocol, f"# Protocolo: {protocol} | modo: {'visualizador 3D' if viz else 'headless'}"
-                  f" | duração: {SIMULATION_DURATION:.0f}s")
+                  f" | duração: {duration:.0f}s")
     print(f"\n>>> Log de eventos sendo gravado em: {log_path}\n")
     builder = SimulationBuilder(SimulationConfiguration(
-        duration=SIMULATION_DURATION,
+        duration=duration,
         real_time=False,  # o ritmo do modo 3D fica com o PacingHandler (prazos absolutos)
         execution_logging=False,
     ))
@@ -46,7 +55,8 @@ def run(protocol: str, viz: bool) -> Dict[str, float]:
             x_range=(-extent, extent),
             y_range=(-extent, extent),
             z_range=(0.0, 30.0),
-            information_collection_interval=0.1 * VIZ_SPEEDUP,  # s simulados: ≈ 10 quadros por segundo na tela
+            # ≈ 10 quadros por segundo na tela, mas nunca mais que 0,5 s simulados (< acoplamento de 2 s)
+            information_collection_interval=min(0.1 * VIZ_SPEEDUP, 0.5),
             update_rate=0.1,
             open_browser=True,
         )))

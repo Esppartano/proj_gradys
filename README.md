@@ -42,8 +42,8 @@ ativar o ambiente, dá para chamar o Python dele direto:
 
 ```powershell
 python main.py              # menu interativo
-python main.py 5            # benchmark dos 4 protocolos, modo rápido (sem browser, ≈ 10 s)
-python main.py 4 1          # SwCore no visualizador 3D (abre o browser; tempo real)
+python main.py 5            # benchmark dos 4 protocolos, modo rápido (sem browser, ≈ 1 min)
+python main.py 4 1          # SwCore no visualizador 3D (abre o browser; 30× mais rápido)
 python main.py 3 2          # DTN em modo rápido
 ```
 
@@ -59,8 +59,12 @@ Formato dos atalhos: `python main.py <opção> [modo]`
 
 Modo: `1` = visualizador 3D (padrão) · `2` = rápido, sem browser.
 
-A simulação cobre 10 voltas (10 min simulados). No visualizador 3D, que roda
-em tempo real, uma volta leva 1 min; para encerrar antes, use Ctrl+C.
+Os dois modos simulam 60 voltas (60 min simulados). O modo rápido gera os
+resultados em ≈ 1 min; o visualizador 3D acelera o tempo 30× (os 60 min passam
+em 2 min na tela; uma volta, em 2 s). Para ver os acoplamentos com calma, baixe
+o `VIZ_SPEEDUP` (ex.: 5). Para encerrar antes, use Ctrl+C. As durações ficam em `src/config.py`
+(`TURNS`, `VIZ_TURNS` e `VIZ_SPEEDUP`); a última volta só entrega as pendentes, então são
+necessárias pelo menos 2 voltas.
 
 ## Saídas
 
