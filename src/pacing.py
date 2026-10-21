@@ -2,7 +2,7 @@
 Ritmo do modo 3D: roda a simulação VIZ_SPEEDUP vezes mais rápido que o tempo real.
 
 O `real_time` do GrADySim espera um pouco antes de cada evento, e essas esperas
-relativas acumulam atraso: pedindo 30×, medimos só ≈ 5×. Este handler usa
+relativas acumulam atraso: pedindo 30x, foi medido só ≈ 5x. Este handler usa
 prazos absolutos: a cada passo, o instante simulado t deve acontecer em
 `início + t / fator` no relógio; se a simulação está adiantada, dorme até lá.
 """
