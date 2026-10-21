@@ -2,20 +2,21 @@
 Motor: monta e roda a simulação de um único cenário (Swarm Core em V);
 só o protocolo muda. O ponto de entrada é o menu em `main.py`, na raiz.
 """
+from math import isnan
 from typing import Dict, List
 
-from gradysim.simulator.handler.communication import CommunicationMedium
+from gradysim.simulator.handler.communication import CommunicationHandler, CommunicationMedium
 from gradysim.simulator.handler.mobility import MobilityConfiguration, MobilityHandler
 from gradysim.simulator.handler.timer import TimerHandler
 from gradysim.simulator.handler.visualization import VisualizationConfiguration, VisualizationHandler
 from gradysim.simulator.simulation import SimulationBuilder, SimulationConfiguration
 
-from src.config import COMM_DELAY, COMM_RANGE, MOBILITY_UPDATE, SIMULATION_DURATION
+from src.config import AWAY_DISTANCE, COMM_DELAY, COMM_RANGE, MOBILITY_UPDATE, SIMULATION_DURATION, VIZ_SPEEDUP
 from src import eventlog
 from src.metrics import METRICS
 from src.nodes import make_node
-from src.radio import SwarmCommunicationHandler
-from src.scenario import ALL_NODES, initial_position
+from src.pacing import PacingHandler
+from src.scenario import ALL_NODES, DOCK_RADIUS, initial_position
 
 
 def run(protocol: str, viz: bool) -> Dict[str, float]:
@@ -27,23 +28,25 @@ def run(protocol: str, viz: bool) -> Dict[str, float]:
     print(f"\n>>> Log de eventos sendo gravado em: {log_path}\n")
     builder = SimulationBuilder(SimulationConfiguration(
         duration=SIMULATION_DURATION,
-        real_time=viz,
+        real_time=False,  # o ritmo do modo 3D fica com o PacingHandler (prazos absolutos)
         execution_logging=False,
     ))
 
     Node = make_node(protocol, viz)
-    for node_id in ALL_NODES:  # a ordem de criação define os IDs (0 = BS)
+    for node_id in ALL_NODES:  # a ordem de criação define os IDs (0..8 = Core, 9..12 = satélites)
         builder.add_node(Node, initial_position(node_id))
 
     builder.add_handler(TimerHandler())
     builder.add_handler(MobilityHandler(MobilityConfiguration(update_rate=MOBILITY_UPDATE)))
-    builder.add_handler(SwarmCommunicationHandler(CommunicationMedium(transmission_range=COMM_RANGE, delay=COMM_DELAY)))
+    builder.add_handler(CommunicationHandler(CommunicationMedium(transmission_range=COMM_RANGE, delay=COMM_DELAY)))
     if viz:
+        builder.add_handler(PacingHandler(VIZ_SPEEDUP))
+        extent = DOCK_RADIUS + AWAY_DISTANCE + 10.0
         builder.add_handler(VisualizationHandler(VisualizationConfiguration(
-            x_range=(-50.0, 50.0),
-            y_range=(-50.0, 50.0),
-            z_range=(0.0, 20.0),
-            information_collection_interval=0.1,
+            x_range=(-extent, extent),
+            y_range=(-extent, extent),
+            z_range=(0.0, 30.0),
+            information_collection_interval=0.1 * VIZ_SPEEDUP,  # s simulados: ≈ 10 quadros por segundo na tela
             update_rate=0.1,
             open_browser=True,
         )))
@@ -60,11 +63,12 @@ def run(protocol: str, viz: bool) -> Dict[str, float]:
 # (título, chave em METRICS.summary(), formato, legenda)
 COLUMNS = [
     ("Protocolo", "protocol", "{}", "Protocolo de roteamento usado."),
-    ("Criadas", "created", "{}", "Mensagens de dados criadas pelos endpoints (satélites e BS); igual em todos."),
+    ("Criadas", "created", "{}", "Mensagens criadas pelos satélites (uma por acoplamento, para o satélite do eixo oposto); igual em todos."),
     ("Entregues", "delivered", "{}", "Mensagens que chegaram ao destino (só a primeira chegada conta)."),
     ("PDR%", "pdr", "{:.1f}", "Taxa de entrega: entregues / criadas × 100. Mede a eficácia."),
     ("Lat. média(s)", "lat_mean", "{:.2f}", "Tempo médio entre criar e entregar (só das entregues)."),
     ("Lat. mediana(s)", "lat_median", "{:.2f}", "Mediana desse tempo (menos sensível a extremos)."),
+    ("Lat. máx.(s)", "lat_max", "{:.2f}", "Maior tempo entre criar e entregar."),
     ("Saltos médios", "hops_mean", "{:.2f}", "Transmissões de rádio que a mensagem entregue percorreu, em média."),
     ("Tx dados", "data_tx", "{}", "Pacotes de dados transmitidos (um lote do DTN conta como 1)."),
     ("Msgs dados tx", "data_msgs_tx", "{}", "Mensagens de dados transmitidas, contando cada uma dentro dos lotes do DTN."),
@@ -77,16 +81,22 @@ COLUMNS = [
     ("Contornos", "bypasses", "{}", "GeoCast: vazios de cobertura contornados pela busca de rota (Choi et al.)."),
     ("Sem rota", "no_route", "{}", "GeoCast: mensagens descartadas num vazio de cobertura que a busca de rota não conseguiu contornar."),
     ("ACKs origem", "acks_received", "{}", "Flooding: confirmações do receptor que chegaram de volta à origem."),
-    ("Expiradas", "expired", "{}", "Mensagens nunca entregues cuja espera venceu: retenção no SwCore ou cópias no DTN."),
     ("Energia", "energy", "{:.0f}", "Energia de rádio: 1 por transmissão + 0,5 por recepção (unidades arbitrárias)."),
 ]
+
+
+def _cell(value, fmt: str) -> str:
+    """Formata a célula; métricas sem amostra (ex.: latência sem entregas) viram n/d."""
+    if isinstance(value, float) and isnan(value):
+        return "n/d"
+    return fmt.format(value)
 
 
 def _table(results: List[Dict[str, float]]) -> str:
     lines = ["| " + " | ".join(title for title, *_ in COLUMNS) + " |",
              "|" + "|".join(" :---: " for _ in COLUMNS) + "|"]
     for r in results:
-        lines.append("| " + " | ".join(fmt.format(r[key]) for _, key, fmt, _ in COLUMNS) + " |")
+        lines.append("| " + " | ".join(_cell(r[key], fmt) for _, key, fmt, _ in COLUMNS) + " |")
     return "\n".join(lines)
 
 

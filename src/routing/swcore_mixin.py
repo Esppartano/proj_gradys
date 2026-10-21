@@ -2,28 +2,29 @@
 SwCore: roteamento pela árvore geradora do Swarm Core, com tabela de alcance.
 
 Cada nó do Core conhece só os seus vizinhos na árvore (TREE_NEIGHBORS) e
-mantém, para cada endpoint (satélite ou BS), uma entrada com o nº do handshake:
-  - "direct"   → AbleToDeliverDirectly (o endpoint fez handshake comigo);
+mantém, para cada satélite, uma entrada com o nº do handshake:
+  - "direct"   → AbleToDeliverDirectly (o satélite fez handshake comigo);
   - <vizinho>  → NextHop(Uy) na árvore;
   - None       → Unreachable.
 
 - Handshake (camada de enlace): o hub marca "direct" e anuncia REACH(ep, seq)
   pela árvore; cada receptor faz table[ep] = remetente e repassa aos outros
   vizinhos da árvore (sem laços: é uma árvore).
-- Despedida ou perda do endpoint: o hub anuncia UNREACH(ep, seq). Anúncios
+- Despedida ou perda do satélite: o hub anuncia UNREACH(ep, seq). Anúncios
   com seq menor que o da entrada são descartados (velhos).
-- Dados: o endpoint entrega ao seu hub. No Core, nesta ordem:
-    Direct (endpoint ligado a mim)  → entrega direto;
+- Dados: o satélite entrega ao seu hub. No Core, nesta ordem:
+    Direct (satélite ligado a mim)  → entrega direto;
     NextHop(Uy)                     → repassa pela árvore;
-    Unreachable, mas eu o sinto     → entrega direto (backup, como no enunciado);
-    Unreachable                     → guarda (entrega diferida) até um REACH
-                                      ou contato com o destino.
+    Unreachable                     → guarda (entrega diferida, sem prazo:
+                                      armazenamento ilimitado) até um REACH
+                                      do destino.
+- Satélites só trocam mensagens com o hub, enquanto acoplados (regra comum,
+  em `RoutingMixin`): por isso a entrega a um satélite é sempre pelo estado
+  Direct, no hub.
 - O líder de mobilidade (C1) não tem papel especial na transmissão.
 """
 from typing import Dict, Optional, Tuple, Union
 
-from src.config import LINK_BEACON, SWCORE_HOLD_TIME
-from src.metrics import METRICS
 from src.routing import messages as m
 from src.routing.base import RoutingMixin
 from src.scenario import TREE_NEIGHBORS, label
@@ -36,8 +37,8 @@ class SwCoreMixin(RoutingMixin):
 
     def initialize(self) -> None:
         super().initialize()
-        self.table: Dict[int, Tuple[Route, int]] = {}             # endpoint → (rota, seq)
-        self._held: Dict[str, Tuple[m.DataMessage, float]] = {}   # id → (msg, expira em)
+        self.table: Dict[int, Tuple[Route, int]] = {}  # satélite → (rota, seq)
+        self._held: Dict[str, m.DataMessage] = {}      # id → mensagem guardada
 
     # ── Endpoints ─────────────────────────────────────────────────────────
 
@@ -93,11 +94,6 @@ class SwCoreMixin(RoutingMixin):
     def _send(self, message: m.DataMessage, peer: int) -> None:
         self._unicast(self._forward_copy(message), peer)
 
-    def _senses(self, endpoint: int) -> bool:
-        """Backup: ouvi o endpoint há menos de um período do beacon dele."""
-        link = self._links.get(endpoint)
-        return link is not None and self.provider.current_time() - link.heard_at <= 1.2 * LINK_BEACON[link.role]
-
     def _route(self, message: m.DataMessage) -> bool:
         """Tenta avançar a mensagem; retorna False se ela precisa esperar."""
         destination = message["destination"]
@@ -108,31 +104,18 @@ class SwCoreMixin(RoutingMixin):
         elif route not in (None, DIRECT):
             self._send(message, route)
             self._note("forwarded", f"Repassou {message['name']} a {label(route)}", "forwarded")
-        elif self._senses(destination):
-            self._send(message, destination)
-            self._note("forwarded", f"Entregou {message['name']} a {label(destination)} (backup)", "forwarded")
         else:
             return False
         return True
 
     def _hold(self, message: m.DataMessage) -> None:
-        self._held[message["message_id"]] = (message, self.provider.current_time() + SWCORE_HOLD_TIME)
+        self._held[message["message_id"]] = message  # armazenamento ilimitado, sem prazo
         self._note("held", f"Guardou {message['name']} ({label(message['destination'])} inalcançável)")
 
     def _flush_held(self) -> None:
-        now = self.provider.current_time()
-        for msg_id, (msg, expires) in list(self._held.items()):
-            if now > expires:
+        for msg_id, msg in list(self._held.items()):
+            if self._route(msg):
                 del self._held[msg_id]
-                METRICS.expired += 1
-                self.stats["expired"] += 1
-            elif self._route(msg):
-                del self._held[msg_id]
-
-    def _on_contact(self, peer: int) -> None:
-        super()._on_contact(peer)
-        if self.role == "core":
-            self._flush_held()
 
     def _on_routing(self, raw: dict) -> None:
         kind = raw["msg_type"]
@@ -150,10 +133,3 @@ class SwCoreMixin(RoutingMixin):
         self._seen.add(raw["message_id"])
         if self.role == "core" and not self._route(raw):
             self._hold(raw)
-
-    def finish(self) -> None:
-        now = self.provider.current_time()
-        expired = sum(1 for _, expires in self._held.values() if now > expires)
-        METRICS.expired += expired
-        self.stats["expired"] += expired
-        super().finish()

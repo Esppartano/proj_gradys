@@ -3,7 +3,8 @@ Métricas de roteamento, coletadas durante a simulação (nada é fixado à mão
 
 Definições
 ----------
-- Mensagem criada: um endpoint gera uma mensagem conforme a agenda de tráfego.
+- Mensagem criada: cada acoplamento de um satélite gera uma mensagem para o
+  satélite do eixo oposto.
 - Entrega: primeira chegada da mensagem ao destino; repetições contam como
   `duplicate_deliveries`.
 - PDR: entregas / mensagens criadas.
@@ -22,7 +23,7 @@ Definições
 """
 from dataclasses import dataclass, field
 from statistics import mean, median
-from typing import Dict, List, Set
+from typing import Dict, List
 
 from src.config import E_RX, E_TX
 
@@ -41,9 +42,6 @@ class RoutingMetrics:
     no_route: int = 0          # GeoCast: sem vizinho que avance e sem rota pela busca
     bypasses: int = 0          # GeoCast: vazios contornados pela busca de rota
     acks_received: int = 0     # Flooding: ACKs que chegaram de volta à origem
-    buffer_drops: int = 0
-    expired: int = 0
-    expired_ids: Set[str] = field(default_factory=set)  # DTN: ids com cópia vencida
     latencies: Dict[str, float] = field(default_factory=dict)
     hops: Dict[str, int] = field(default_factory=dict)
 
@@ -60,11 +58,6 @@ class RoutingMetrics:
         self.hops[message_id] = message["hops"]
         return True
 
-    def record_expired(self, message_id: str) -> None:
-        """DTN: uma cópia venceu. No fim só contam as mensagens nunca entregues
-        (várias cópias da mesma mensagem contam uma vez)."""
-        self.expired_ids.add(message_id)
-
     def summary(self) -> Dict[str, float]:
         delivered = len(self.latencies)
         lat: List[float] = list(self.latencies.values())
@@ -76,6 +69,7 @@ class RoutingMetrics:
             "pdr": 100.0 * delivered / self.created if self.created else 0.0,
             "lat_mean": mean(lat) if lat else float("nan"),
             "lat_median": median(lat) if lat else float("nan"),
+            "lat_max": max(lat) if lat else float("nan"),
             "hops_mean": mean(hops) if hops else float("nan"),
             "data_tx": self.data_tx,
             "data_msgs_tx": self.data_msgs_tx,
@@ -89,8 +83,6 @@ class RoutingMetrics:
             "no_route": self.no_route,
             "bypasses": self.bypasses,
             "acks_received": self.acks_received,
-            "buffer_drops": self.buffer_drops,
-            "expired": self.expired + len(self.expired_ids - set(self.latencies)),
             "energy": E_TX * tx + E_RX * self.rx,
         }
 

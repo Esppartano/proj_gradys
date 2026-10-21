@@ -4,8 +4,8 @@ DTN Store-Carry-Forward com troca completa no encontro (slide da disciplina).
 Segue o slide: entrega eventual pelos nós em movimento; no encontro, os nós
 trocam TODAS as mensagens que o outro ainda não tem ("swap all messages").
 
-- Store: cada nó guarda cópias no buffer (limite DTN_BUFFER_SIZE; cada cópia
-  expira DTN_MSG_TTL s após a criação da mensagem).
+- Store: cada nó guarda cópias no buffer, sem limite de tamanho nem prazo
+  (armazenamento ilimitado no Core, como na convenção da disciplina).
 - Vetor-resumo (SUMMARY, controle): ids que tenho no buffer + ids que sei que
   já foram entregues ("aviso de entrega"). É enviado:
     * em unicast, ao ganhar um vizinho novo (encontro);
@@ -15,17 +15,18 @@ trocam TODAS as mensagens que o outro ainda não tem ("swap all messages").
 - Troca em 2 passos: quem recebe o SUMMARY de A envia a A, num lote (BUNDLE),
   as mensagens que A não tem; se A tem mensagens que ele não tem, responde com
   o próprio SUMMARY, para A fazer o mesmo.
+- Satélites são só origem e destino (regra comum, em `RoutingMixin`): a troca
+  com um satélite acontece no acoplamento, só com o hub; o hub entrega a ele
+  apenas as mensagens destinadas a ele, e o satélite não guarda as de outros.
 - Aviso de entrega: o destino registra a entrega; os ids entregues viajam nos SUMMARY e
   quem os recebe apaga as cópias. Nenhum nó conhece posições ou estado global.
 """
 from collections import OrderedDict
 from typing import Dict, Set
 
-from src.config import DTN_BUFFER_SIZE, DTN_MSG_TTL
-from src.metrics import METRICS
 from src.routing import messages as m
 from src.routing.base import RoutingMixin
-from src.scenario import label
+from src.scenario import label, role
 
 
 class DTNMixin(RoutingMixin):
@@ -42,20 +43,11 @@ class DTNMixin(RoutingMixin):
     # ── Buffer ────────────────────────────────────────────────────────────
 
     def _purge(self) -> None:
-        """Descarta cópias vencidas ou de mensagens já entregues."""
-        now = self.provider.current_time()
-        for msg_id, msg in list(self._buffer.items()):
-            if msg_id in self._delivered:
-                del self._buffer[msg_id]
-            elif now > msg["created_at"] + DTN_MSG_TTL:
-                del self._buffer[msg_id]
-                METRICS.record_expired(msg_id)
-                self.stats["expired"] += 1
+        """Descarta as cópias de mensagens que já foram entregues."""
+        for msg_id in [i for i in self._buffer if i in self._delivered]:
+            del self._buffer[msg_id]
 
     def _store(self, message: m.DataMessage) -> None:
-        if len(self._buffer) >= DTN_BUFFER_SIZE:
-            self._buffer.popitem(last=False)
-            METRICS.buffer_drops += 1
         self._buffer[message["message_id"]] = message
 
     def _originate(self, message: m.DataMessage) -> None:
@@ -71,13 +63,16 @@ class DTNMixin(RoutingMixin):
 
     def _announce(self) -> None:
         """Buffer ganhou mensagens novas: avisa os vizinhos atuais."""
-        if self.neighbors():
+        if self._routing_neighbors():
             self._broadcast(self._summary(), control=True)
+        for sat in list(self.tethered):  # satélite acoplado: recebe o que é para ele
+            self._send_missing(sat)
 
     def _send_missing(self, peer: int) -> None:
         """Envia ao vizinho, num lote, as mensagens que ele ainda não tem."""
         known = self._peer_has.setdefault(peer, set())
-        batch = [msg for msg_id, msg in self._buffer.items() if msg_id not in known]
+        batch = [msg for msg_id, msg in self._buffer.items() if msg_id not in known
+                 and (role(peer) == "core" or msg["destination"] == peer)]  # satélite: só as dele
         if not batch:
             return
         known.update(msg["message_id"] for msg in batch)
@@ -92,16 +87,32 @@ class DTNMixin(RoutingMixin):
 
     def _on_contact(self, peer: int) -> None:
         super()._on_contact(peer)
-        self._unicast(self._summary(), peer, control=True)
+        if peer in self._routing_neighbors():  # encontro entre nós do Core
+            self._unicast(self._summary(), peer, control=True)
+
+    def _on_hub(self, hub) -> None:
+        super()._on_hub(hub)  # (satélite) acoplou: avisa o hub do que já recebeu
+        if hub is not None and self._delivered:
+            self._announce()
+
+    def _on_link_up(self, endpoint: int, seq: int) -> None:
+        super()._on_link_up(endpoint, seq)  # (Core) satélite acoplou: troca com ele
+        self._unicast(self._summary(), endpoint, control=True)
+        self._send_missing(endpoint)
 
     def _on_routing(self, raw: dict) -> None:
         kind, peer = raw["msg_type"], raw["sender_id"]
         if kind == m.SUMMARY:
-            self._delivered.update(raw["delivered"])
+            learned = set(raw["delivered"]) - self._delivered  # avisos de entrega novos
+            self._delivered.update(learned)
             self._purge()
+            if learned and not self.is_endpoint:
+                self._announce()  # espalha o aviso pelo Core, mesmo sem mensagem nova
             # Acumula (não sobrescreve): um lote meu ainda em voo já está contado
             self._peer_has.setdefault(peer, set()).update(raw["ids"], raw["delivered"])
             self._send_missing(peer)
+            if self.is_endpoint:  # satélite não pede mensagens de outros
+                return
             lacking = set(raw["ids"]) - set(self._buffer) - self._delivered  # ele tem o que eu não tenho
             stale = set(raw["ids"]) & self._delivered                       # ele guarda o que já foi entregue
             if lacking or stale:
@@ -116,6 +127,8 @@ class DTNMixin(RoutingMixin):
                         new += 1  # o aviso de entrega precisa sair
                     self._deliver(msg)
                     self._delivered.add(msg["message_id"])
+                elif self.is_endpoint:
+                    continue  # satélite não guarda mensagens de outros
                 elif msg["message_id"] in self._buffer or msg["message_id"] in self._delivered:
                     self._redundant()
                 else:

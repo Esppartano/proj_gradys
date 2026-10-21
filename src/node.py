@@ -1,26 +1,27 @@
 """
-Nó do cenário Swarm Core: enlace, mobilidade e agenda de tráfego (sem roteamento).
+Nó do cenário Swarm Core: enlace, mobilidade e geração de tráfego (sem roteamento).
 
 Camada comum a todos os protocolos (não entra nas métricas de roteamento):
-- Beacons de enlace: cada nó anuncia id, papel, posição e (no
-  Core) o ângulo da formação. Só os vizinhos dentro do alcance ouvem.
+- Beacons de enlace: cada nó anuncia id, papel, posição e (no Core) o ângulo
+  da formação. Só os vizinhos dentro do alcance ouvem.
 - Formação em cascata pela árvore: o ápice C1 voa o circuito do plano; cada
   outro nó segue o seu pai na árvore (FORMATION_PARENT) com o deslocamento do
   V, usando só o beacon do pai (posição e ângulo). O atraso do beacon é
   compensado pela lei de rotação do plano (centro e ω), não por velocidade
   medida — extrapolar velocidade amplificava o erro ao longo da cascata.
-- Satélites: patrulham o setor; quando o plano prevê a passagem do seu lado,
-  aproximam-se, escolhem o hub entre os nós do Core que ouvem (o próprio lado,
-  se ouvido; senão o mais próximo) e confirmam por handshake (link_req/ack).
-  Ficam em tandem sobre o hub por T a 4T s e se despedem (link_bye).
-- BS: endpoint fixo; faz o mesmo handshake com o nó do Core mais próximo que ouve.
+- Satélites: esperam parados no ponto de acoplamento do seu eixo (5 m além do
+  perímetro da formação). Descobrem os nós do Core pelo rádio (30 m) e acoplam
+  no que passa pelo ponto (a até DOCK_CAPTURE m: uma das pontas do V),
+  confirmando por handshake (link_req/ack). Acoplados, criam uma
+  mensagem para o satélite do eixo oposto e trocam mensagens por
+  CONTACT_DWELL s; depois se despedem (link_bye), afastam-se em linha reta
+  pelo eixo, com velocidade constante, e voltam ao ponto de acoplamento.
 
 Ganchos para o roteamento: `_on_traffic`, `_on_packet`, `_on_contact`,
-`_on_link_up/_on_link_down` (Core) e `_on_hub` (endpoints).
+`_on_link_up/_on_link_down` (Core) e `_on_hub` (satélites).
 """
 import json
-import random
-from math import dist, radians
+from math import dist
 from typing import Dict, Optional
 
 from gradysim.protocol.interface import IProtocol
@@ -29,14 +30,14 @@ from gradysim.protocol.messages.mobility import GotoCoordsMobilityCommand, SetSp
 from gradysim.protocol.messages.telemetry import Telemetry
 
 from src.config import (
-    APPROACH_LEAD, CORE_SPEED, HANDSHAKE_WAIT, LINK_BEACON, LINK_TIMEOUT, MOBILITY_SEED,
-    PATROL_ARC, PATROL_RADIAL, ROTATION_OMEGA, SATELLITE_ALT, SATELLITE_SECTORS,
-    SATELLITE_SPEED, TANDEM_T,
+    CONTACT_DWELL, CONTACT_GAP, CORE_SPEED, DOCK_CAPTURE, LINK_BEACON, LINK_TIMEOUT, ROTATION_OMEGA,
+    SATELLITE_PAIRS, SATELLITE_SPEED, TRAFFIC_END,
 )
 from src import eventlog, scenario as sc
 
-CORE_STEP = 0.1               # s entre comandos de mobilidade do Core
-SATELLITE_STEP = 0.2
+CORE_STEP = 0.2               # s entre comandos de mobilidade do Core
+SATELLITE_STEP = 0.2          # s entre decisões de mobilidade do satélite
+ARRIVED = 0.5                 # m: considera que chegou ao ponto
 
 
 class Neighbor:
@@ -62,31 +63,28 @@ class SwarmNode(IProtocol):
         self.node_id = self.provider.get_id()
         self.role = sc.role(self.node_id)
         self._position: sc.Position = sc.initial_position(self.node_id)
-        self._rng = random.Random(MOBILITY_SEED * 1000 + self.node_id)
         self._links: Dict[int, Neighbor] = {}
         self._angle: Optional[float] = sc.formation_angle(0.0) if self.role == "core" else None
 
-        # Endpoints (satélites e BS)
+        # Satélites
         self.hub: Optional[int] = None
         self._link_seq = 0      # último seq pedido
         self._acked_seq = 0     # seq confirmado pelo hub atual (usado no link_bye)
-        self.flight = "fixo" if self.role == "bs" else "formação"
+        self._last_contact = -CONTACT_GAP
+        self._encounters = 0
+        self._pending_message = False
+        self._requested_hub: Optional[int] = None  # nó a quem pedi o acoplamento (ack ainda a caminho)
+        self.flight = "formação"
         # Core
-        self.tethered: Dict[int, int] = {}  # endpoint → seq do handshake
+        self.tethered: Dict[int, int] = {}  # satélite → seq do handshake
 
         if self.role == "satellite":
-            self._side = sc.satellite_side(self.node_id)
-            self._sector = radians(SATELLITE_SECTORS[self.node_id][0])
-            self._enter_patrol(0.0)
+            self.flight = "espera"
             self.provider.send_mobility_command(SetSpeedMobilityCommand(SATELLITE_SPEED))
             self.provider.schedule_timer("move", SATELLITE_STEP)
-        elif self.role == "core":
+        else:
             self.provider.schedule_timer("move", CORE_STEP)
-
         self.provider.schedule_timer("link_beacon", 0.01 * self.node_id)
-        for index, (t, src, dst, name) in enumerate(sc.traffic()):
-            if src == self.node_id:
-                self.provider.schedule_timer(f"send:{index}", t)
 
     # ── Ganchos do roteamento ─────────────────────────────────────────────
 
@@ -100,18 +98,18 @@ class SwarmNode(IProtocol):
         """Um vizinho passou a ser ouvido."""
 
     def _on_link_up(self, endpoint: int, seq: int) -> None:
-        """(Core) Um endpoint fez handshake com este nó."""
+        """(Core) Um satélite fez handshake com este nó."""
 
     def _on_link_down(self, endpoint: int, seq: int) -> None:
-        """(Core) Um endpoint ligado a este nó se despediu ou sumiu."""
+        """(Core) Um satélite ligado a este nó se despediu ou sumiu."""
 
     def _on_hub(self, hub: Optional[int]) -> None:
-        """(Endpoint) O hub mudou (None = desconectado do Core)."""
+        """(Satélite) O hub mudou (None = desconectado do Core)."""
 
     # ── Log ───────────────────────────────────────────────────────────────
 
     def _log(self, text: str) -> str:
-        line = f"[{self.provider.current_time():6.1f}s][{sc.label(self.node_id):>3}] {text}"
+        line = f"[{self.provider.current_time():7.1f}s][{sc.label(self.node_id):>3}] {text}"
         eventlog.write(line)
         return line
 
@@ -145,23 +143,23 @@ class SwarmNode(IProtocol):
                     self._on_link_down(endpoint, seq)
         elif self.hub is not None and not self._alive(self.hub):
             self._set_hub(None)
-        if self.role == "bs" and self.hub is None:
-            self._request_link(self._choose_hub())
 
     # ── Handshake ─────────────────────────────────────────────────────────
 
     def _choose_hub(self) -> Optional[int]:
+        """O nó do Core que está passando pelo ponto de acoplamento: o mais
+        próximo que este satélite ouve, se estiver a até DOCK_CAPTURE m."""
         core = {p: n for p, n in self.neighbors().items() if n.role == "core"}
         if not core:
             return None
-        if self.role == "satellite" and self._side in core:
-            return self._side
-        return min(core, key=lambda p: dist(core[p].position, self._position))
+        nearest = min(core, key=lambda p: dist(core[p].position, self._position))
+        return nearest if dist(core[nearest].position, self._position) <= DOCK_CAPTURE else None
 
     def _request_link(self, core: Optional[int]) -> None:
         if core is None:
             return
         self._link_seq += 1
+        self._requested_hub = core
         self._send_raw({"msg_type": "link_req", "id": self.node_id, "role": self.role,
                         "pos": self._position, "seq": self._link_seq}, core)
 
@@ -171,6 +169,7 @@ class SwarmNode(IProtocol):
         self._log(f"Conectou ao hub {sc.label(hub)}" if hub is not None
                   else f"Desconectou do hub {sc.label(self.hub)}")
         self.hub = hub
+        self._requested_hub = None  # acoplamento confirmado ou encerrado: o pedido acabou
         self._on_hub(hub)
 
     def _handle_link(self, raw: dict) -> None:
@@ -190,15 +189,17 @@ class SwarmNode(IProtocol):
             if self.tethered.get(sender) == raw["seq"]:
                 del self.tethered[sender]
                 self._on_link_down(sender, raw["seq"])
-        elif kind == "link_ack" and self.role != "core":
+        elif kind == "link_ack" and self.role == "satellite":
             if self.hub is not None and sender != self.hub:  # ack de um pedido anterior a outro nó: desfaz
                 self._send_raw({"msg_type": "link_bye", "id": self.node_id, "seq": raw["seq"]}, sender)
                 return
             self._acked_seq = max(self._acked_seq, raw["seq"]) if sender == self.hub else raw["seq"]
-            if self.role == "satellite" and self.flight == "handshake":
-                self.flight = "tandem"
-                self._tandem_end = now + self._rng.uniform(TANDEM_T, 4 * TANDEM_T)
+            if self.flight == "espera":
+                self._start_contact(now)
             self._set_hub(sender)
+            if self.flight == "contato" and self._pending_message:
+                self._pending_message = False
+                self._create_message(now)
 
     # ── Mobilidade do Core (cascata líder/seguidor) ───────────────────────
 
@@ -223,54 +224,58 @@ class SwarmNode(IProtocol):
         dx, dy = sc.slot_offset(self.node_id, parent, angle)
         return (px + dx, py + dy, pz)
 
-    # ── Mobilidade dos satélites ──────────────────────────────────────────
+    # ── Satélites: espera → contato → afastamento → retorno ───────────────
 
-    def _enter_patrol(self, now: float) -> None:
-        self.flight = "patrulha"
-        self._waypoint = None
-        self._pass_at = sc.next_pass(self._side, self._sector, now + 1.0)
+    def _start_contact(self, now: float) -> None:
+        self.flight = "contato"
+        self._contact_end = now + CONTACT_DWELL
+        self._last_contact = now
+        self._pending_message = True  # criada assim que o hub estiver registrado
+        self.provider.schedule_timer("undock", self._contact_end)  # desacopla exatamente após CONTACT_DWELL
+
+    def _undock(self) -> None:
+        """Fim da troca: despede-se do hub e começa a se afastar pelo eixo."""
+        if self.hub is not None:
+            self._send_raw({"msg_type": "link_bye", "id": self.node_id, "seq": self._acked_seq}, self.hub)
+            self._set_hub(None)
+        self.flight = "afastando"
+        self.provider.send_mobility_command(GotoCoordsMobilityCommand(*sc.satellite_away(self.node_id)))
+
+    def _create_message(self, now: float) -> None:
+        """Cada acoplamento gera uma mensagem para o satélite do eixo oposto."""
+        if now > TRAFFIC_END:
+            return
+        self._encounters += 1
+        destination = SATELLITE_PAIRS[self.node_id]
+        self._on_traffic(destination, f"{sc.label(self.node_id)}>{sc.label(destination)}#{self._encounters}")
 
     def _satellite_target(self, now: float) -> sc.Position:
-        if self.flight == "patrulha":
-            if now >= self._pass_at - APPROACH_LEAD:
-                self.flight = "aproximação"
+        dock = sc.satellite_dock(self.node_id)
+        if self.flight == "espera":
+            if dist(self._position, dock) <= ARRIVED and now - self._last_contact >= CONTACT_GAP:
+                self._request_link(self._choose_hub())  # repete até o ack chegar
+            return dock
+        if self.flight == "contato":
+            if self.hub is None:  # perdeu o hub antes do fim da troca
+                self._undock()
             else:
-                if self._waypoint is None or dist(self._waypoint, self._position) < 0.5:
-                    self._waypoint = sc.satellite_home(
-                        self.node_id,
-                        self._rng.uniform(-PATROL_ARC, PATROL_ARC),
-                        self._rng.uniform(-PATROL_RADIAL, PATROL_RADIAL),
-                    )
-                return self._waypoint
-
-        if self.flight in ("aproximação", "handshake"):
-            if now > self._pass_at + APPROACH_LEAD:  # perdeu a passagem: tenta na próxima
-                self._enter_patrol(now)
-                return self._position
-            if self.flight == "aproximação" and any(n.role == "core" for n in self.neighbors().values()):
-                self.flight = "handshake"
-                self._handshake_at = now
-            if self.flight == "handshake" and self.hub is None:
-                side_heard = self._alive(self._side)
-                if side_heard or now - self._handshake_at >= HANDSHAKE_WAIT:
-                    self._request_link(self._choose_hub())  # reenvia até o ack chegar
-            x, y, _ = sc.slot_position(self._side, max(now + SATELLITE_STEP, self._pass_at))
-            return (x, y, SATELLITE_ALT)
-
-        # tandem: acompanha o hub pelo beacon dele
-        if now >= self._tandem_end or self.hub is None:
-            if self.hub is not None:
-                self._send_raw({"msg_type": "link_bye", "id": self.node_id, "seq": self._acked_seq}, self.hub)
-                self._set_hub(None)
-            self._enter_patrol(now)
-            return self._position
-        x, y, _ = self._links[self.hub].predicted(now + SATELLITE_STEP)
-        return (x, y, SATELLITE_ALT)
+                return dock
+        if self.flight == "afastando":
+            away = sc.satellite_away(self.node_id)
+            if dist(self._position, away) <= ARRIVED:
+                self.flight = "voltando"
+                return dock
+            return away
+        # voltando
+        if dist(self._position, dock) <= ARRIVED:
+            self.flight = "espera"
+            self._requested_hub = None
+        return dock
 
     # ── Handlers do GrADySim ──────────────────────────────────────────────
 
     def _goto(self, target: sc.Position, step: float, max_speed: float) -> None:
-        speed = min(max_speed, max(dist(target, self._position) / step, 0.1))
+        speed = min(max_speed, max(dist(target, self._position) / step, 0.01))
         self.provider.send_mobility_command(SetSpeedMobilityCommand(speed))
         self.provider.send_mobility_command(GotoCoordsMobilityCommand(*target))
 
@@ -279,6 +284,9 @@ class SwarmNode(IProtocol):
         if timer == "link_beacon":
             self._link_beacon()
             self.provider.schedule_timer("link_beacon", now + LINK_BEACON[self.role])
+        elif timer == "undock":
+            if self.flight == "contato" and now >= self._contact_end:
+                self._undock()
         elif timer == "move":
             if self.role == "core":
                 target = self._core_target(now + CORE_STEP)
@@ -286,13 +294,9 @@ class SwarmNode(IProtocol):
                     self._goto(target, CORE_STEP, CORE_SPEED)
                 self.provider.schedule_timer("move", now + CORE_STEP)
             else:
-                target = self._satellite_target(now)
-                speed = SATELLITE_SPEED if self.flight != "tandem" else CORE_SPEED
-                self._goto(target, SATELLITE_STEP if self.flight == "tandem" else 1.0, speed)
+                # Velocidade constante, sempre em linha reta pelo eixo
+                self.provider.send_mobility_command(GotoCoordsMobilityCommand(*self._satellite_target(now)))
                 self.provider.schedule_timer("move", now + SATELLITE_STEP)
-        elif timer.startswith("send:"):
-            _, src, dst, name = sc.traffic()[int(timer.split(":")[1])]
-            self._on_traffic(dst, name)
 
     def handle_telemetry(self, telemetry: Telemetry) -> None:
         self._position = tuple(telemetry.current_position)

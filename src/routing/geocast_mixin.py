@@ -7,9 +7,13 @@ vizinhos para repassar "na direção" do destino, contornando áreas sem
 cobertura quando possível; ao chegar à zona-alvo, inunda localmente.
 
 - Posição do destino: a prevista pelo plano compartilhado (`planned_position`:
-  o ponto do setor do satélite ou o centro, para a BS). Durante o tandem o
-  satélite está longe do setor e a previsão erra: é a fraqueza do GeoCast
-  com mobilidade ("precisa de posição precisa").
+  o ponto de acoplamento do satélite, no seu eixo). Como cada mensagem vai
+  para o satélite oposto, que nesse momento espera parado no seu ponto, a
+  previsão coincide com a posição real; o GeoCast falha por falta de caminho,
+  não por erro de posição.
+- Satélites são só origem e destino (regra comum, em `RoutingMixin`): o
+  satélite entrega a própria mensagem ao hub e não repassa as de outros nem
+  responde a buscas.
 - Posição dos vizinhos: a anunciada nos beacons de enlace (informação local).
   Distâncias em 3D ("esfera no céu").
 - Fases, em cada nó:
@@ -62,7 +66,11 @@ class GeocastMixin(RoutingMixin):
 
     def _forward(self, raw: dict) -> None:
         destination, target = raw["destination"], raw["dest_pos"]
-        neighbors = self.neighbors()
+        if self.is_endpoint:  # satélite: entrega a própria mensagem ao hub
+            self._unicast(self._forward_copy(raw), self.hub)
+            self._note("forwarded", f"Entregou {raw['name']} ao hub {label(self.hub)}", "forwarded")
+            return
+        neighbors = self._routing_neighbors()
         if destination in neighbors:
             self._unicast(self._forward_copy(raw), destination)
             self._note("forwarded", f"Entregou {raw['name']} direto a {label(destination)}", "forwarded")
@@ -71,8 +79,9 @@ class GeocastMixin(RoutingMixin):
             self._broadcast(self._forward_copy(raw, mode=ZONE, ttl=FLOOD_TTL))
             self._note("forwarded", f"Chegou à zona-alvo: inundou {raw['name']} localmente", "forwarded")
             return
-        best = min(neighbors, key=lambda p: dist(neighbors[p].position, target), default=None)
-        if best is not None and dist(neighbors[best].position, target) < dist(self._position, target):
+        core = {p: n for p, n in neighbors.items() if n.role == "core"}  # satélites não repassam
+        best = min(core, key=lambda p: dist(core[p].position, target), default=None)
+        if best is not None and dist(core[best].position, target) < dist(self._position, target):
             self._unicast(self._forward_copy(raw), best)
             self._note("forwarded", f"Repassou {raw['name']} a {label(best)} (guloso)", "forwarded")
             return
@@ -81,7 +90,7 @@ class GeocastMixin(RoutingMixin):
     # ── Contorno de vazios: busca de rota (Choi et al., II.B) ─────────────
 
     def _start_search(self, raw: dict) -> None:
-        if not self.neighbors():  # isolado: não há por onde buscar
+        if not self._routing_neighbors():  # isolado: não há por onde buscar
             self._drop_no_route(raw)
             return
         self._search_count += 1
@@ -158,6 +167,8 @@ class GeocastMixin(RoutingMixin):
 
     def _on_routing(self, raw: dict) -> None:
         kind = raw["msg_type"]
+        if self.is_endpoint and not (kind == m.DATA and raw["destination"] == self.node_id):
+            return  # satélite: só recebe o que é para ele; não repassa nem responde buscas
         if kind == m.GEO_SEARCH:
             self._on_search(raw)
             return
@@ -176,7 +187,7 @@ class GeocastMixin(RoutingMixin):
             self._redundant()
             return
         self._seen.add(raw["message_id"])
-        if raw["mode"] == GREEDY or raw["destination"] in self.neighbors():
+        if raw["mode"] == GREEDY or raw["destination"] in self._routing_neighbors():
             self._forward(raw)  # a fase 1 (ouço o destino → entrego direto) vale nos dois modos
             return
         # Inundação local: só quem está dentro da zona retransmite

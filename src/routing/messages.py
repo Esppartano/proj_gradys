@@ -22,7 +22,7 @@ ROUTING_TYPES = {DATA, BUNDLE} | CONTROL_TYPES
 class DataMessage(TypedDict, total=False):
     msg_type: str
     message_id: str         # "<origem>:<sequência>", único na simulação
-    name: str               # rótulo do fluxo (ex.: S1>BS#3)
+    name: str               # rótulo do fluxo (ex.: S1>S3#2)
     origin_id: int
     destination: int
     sender_id: int          # último nó que transmitiu

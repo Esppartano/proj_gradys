@@ -2,11 +2,16 @@
 Base comum dos mixins de roteamento.
 
 Cada protocolo é um mixin colocado antes de `SwarmNode`. O mixin:
-  1. recebe da agenda de tráfego o pedido de envio (`_on_traffic`) e cria a
-     mensagem; a origem acumula as mensagens enquanto está isolada
-     (`_can_originate`) e as libera ao ganhar contato;
+  1. recebe o pedido de envio (`_on_traffic`, chamado quando o satélite acopla)
+     e cria a mensagem; se a origem ainda não pode transmitir
+     (`_can_originate`), a mensagem espera na fila até o próximo contato;
   2. trata os pacotes de roteamento (`_on_routing`);
   3. conta transmissões e recepções para as métricas.
+
+Regra comum a todos os protocolos (convenção da disciplina): os satélites são
+só origem e destino. Um satélite troca mensagens apenas com o seu hub e
+apenas enquanto está acoplado; não repassa nem guarda mensagens de outros. O
+nó do Core só troca mensagens com um satélite que esteja acoplado a ele.
 """
 import json
 from typing import List, Optional, Tuple
@@ -15,6 +20,7 @@ from gradysim.protocol.messages.communication import BroadcastMessageCommand, Se
 
 from src.metrics import METRICS
 from src.routing import messages as m
+from src.scenario import role
 
 
 class RoutingMixin:
@@ -28,7 +34,7 @@ class RoutingMixin:
         # Estado observável (lido pela visualização; não afeta o protocolo)
         self.stats = {
             "created": 0, "received": 0, "forwarded": 0, "redundant": 0, "pruned": 0,
-            "ttl_drops": 0, "handed_off": 0, "custody": 0, "expired": 0,
+            "ttl_drops": 0, "handed_off": 0, "custody": 0,
         }
         self.last_event: Optional[Tuple[str, str, float]] = None  # (tipo, texto, instante)
 
@@ -41,8 +47,34 @@ class RoutingMixin:
         raise NotImplementedError
 
     def _can_originate(self) -> bool:
-        """A origem só transmite com algum vizinho ao alcance."""
-        return bool(self.neighbors())
+        """A origem só transmite com alguém com quem pode trocar mensagens."""
+        return bool(self._routing_neighbors())
+
+    # ── Com quem cada nó troca mensagens ──────────────────────────────────
+
+    @property
+    def is_endpoint(self) -> bool:
+        return self.role == "satellite"
+
+    def _routing_neighbors(self) -> dict:
+        """Satélite: só o hub, enquanto acoplado. Core: os vizinhos do Core e
+        os satélites acoplados a ele."""
+        neighbors = self.neighbors()
+        if self.is_endpoint:
+            docked = self.flight == "contato" and self.hub in neighbors
+            return {self.hub: neighbors[self.hub]} if docked else {}
+        return {p: n for p, n in neighbors.items() if n.role == "core" or p in self.tethered}
+
+    def _accepts(self, raw: dict) -> bool:
+        sender = raw.get("sender_id")
+        if self.is_endpoint:
+            if self.flight == "espera":
+                # O hub manda a confirmação e, logo depois, as mensagens guardadas; os dois
+                # pacotes podem chegar no mesmo instante, em qualquer ordem. Aceito o que vem
+                # do nó a quem pedi o acoplamento, mesmo antes da confirmação.
+                return sender == self._requested_hub
+            return self.flight == "contato" and sender == self.hub
+        return role(sender) == "core" or sender in self.tethered
 
     # ── Eventos (HUD, cores, log) ─────────────────────────────────────────
 
@@ -125,6 +157,7 @@ class RoutingMixin:
 
     def _on_packet(self, raw: dict) -> None:
         if raw.get("msg_type") in m.ROUTING_TYPES:
-            METRICS.rx += 1
-            self._on_routing(raw)
+            METRICS.rx += 1  # o rádio recebeu (gasta energia), mesmo que o pacote seja ignorado
+            if self._accepts(raw):
+                self._on_routing(raw)
 

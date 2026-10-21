@@ -2,7 +2,7 @@
 Menu interativo do simulador (mesmo esquema do menu original).
 
 Todos os protocolos rodam no mesmo cenário: Swarm Core em V
-(BS + 9 Core + 4 satélites), com a mesma mobilidade e o mesmo tráfego.
+(9 Core + 4 satélites), com a mesma mobilidade e o mesmo tráfego.
 
 Uso, a partir da raiz do projeto:
     python main.py              # menu interativo
@@ -94,7 +94,7 @@ def main():
     while True:
         print("\n" + "=" * 60)
         print("  SIMULADOR DE PROTOCOLOS FANET / DTN (GrADyS-SIM NG)")
-        print("  Cenário: Swarm Core em V (BS + 9 Core + 4 Satélites)")
+        print("  Cenário: Swarm Core em V (9 Core + 4 Satélites)")
         print("=" * 60)
         print("Escolha o protocolo de roteamento:")
         for key, (name, _) in SCENARIOS.items():

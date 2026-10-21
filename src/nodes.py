@@ -16,7 +16,7 @@ PROTOCOLS = {
 def make_node(protocol: str, viz: bool = False) -> type:
     """
     Factory que combina o mixin de roteamento escolhido com o nó do cenário
-    (mixins antes da classe base). Todos os 14 nós usam a mesma classe; o
+    (mixins antes da classe base). Todos os 13 nós usam a mesma classe; o
     papel vem do ID.
     """
     RoutingMixin = PROTOCOLS[protocol]

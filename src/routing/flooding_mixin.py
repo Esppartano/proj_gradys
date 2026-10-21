@@ -10,18 +10,17 @@ tamanho e densidade da rede; o receptor confirma o recebimento.
   (`covered`, da camada de enlace: informação local de 1 salto). O receptor só
   retransmite se tiver algum vizinho que não esteja nessa lista nem seja o
   próprio remetente; senão, a retransmissão seria inútil. Quem acabou de me
-  enviar um pacote também conta como vizinho: um satélite pode transmitir
-  antes de o seu primeiro beacon chegar (beacon de 0,5 s contra 0,2 s do Core),
-  e sem isso ele ficaria de fora da lista e a poda seria indevida (achado do agy).
+  enviar um pacote também conta como vizinho: um nó pode transmitir antes de
+  o seu primeiro beacon chegar, e sem isso ficaria de fora da lista e a poda
+  seria indevida.
 - ACK: ao entregar pela primeira vez, o destino inunda um ACK (controle) de
   volta à origem, com as mesmas regras. O ACK só confirma a entrega; não há
   retransmissão (a topologia pode mudar no meio, como alerta o slide).
 
-Armazenamento: só na origem (regra comum a todos os protocolos, em
-`RoutingMixin._can_originate`): o satélite acumula o que cria enquanto está
-isolado e inunda ao ganhar o primeiro vizinho. Nos intermediários não há
-armazenamento: se não existir caminho até o destino no instante da inundação,
-a mensagem se perde (não atravessa partições).
+Satélites são só origem e destino (regra comum, em `RoutingMixin`): inundam a
+própria mensagem pelo hub e não retransmitem as de outros. Nos intermediários
+não há armazenamento: se não existir caminho até o destino no instante da
+inundação, a mensagem se perde (não atravessa partições).
 """
 from src.config import FLOOD_TTL, LINK_TIMEOUT
 from src.metrics import METRICS
@@ -41,7 +40,7 @@ class FloodingMixin(RoutingMixin):
         """Vizinhos pela camada de enlace + remetentes ouvidos há pouco."""
         now = self.provider.current_time()
         recent = {p for p, t in self._heard_from.items() if now - t <= LINK_TIMEOUT}
-        return set(self.neighbors()) | recent
+        return set(self._routing_neighbors()) | recent
 
     # ── Inundação com self-pruning ────────────────────────────────────────
 
@@ -63,7 +62,7 @@ class FloodingMixin(RoutingMixin):
             return False
         if self._prunes(raw):
             METRICS.pruned += 1
-            self.stats["pruned"] += 1
+            self._note("pruned", f"Podou {raw.get('name', 'ACK')} (todos os vizinhos já ouviram)", "pruned")
             return False
         self._flood({**raw, "ttl": ttl, "hops": raw.get("hops", 0) + 1, "sender_id": self.node_id},
                     control=control)
@@ -88,6 +87,8 @@ class FloodingMixin(RoutingMixin):
                 self._send_ack(raw)
             self._deliver(raw)
             return
+        if self.is_endpoint:  # satélite não retransmite mensagens de outros
+            return
         if raw["message_id"] in self._seen:
             self._redundant()
             return
@@ -111,4 +112,5 @@ class FloodingMixin(RoutingMixin):
             METRICS.acks_received += 1
             self._note("acked", f"Recebeu ACK da mensagem {raw['ack_id']}")
             return
-        self._relay(raw, control=True)
+        if not self.is_endpoint:
+            self._relay(raw, control=True)
