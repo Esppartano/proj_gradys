@@ -186,10 +186,13 @@ class SwCoreMixin(RoutingMixin):
             return
         self._unicast({"msg_type": m.HOP_ACK, "sender_id": self.node_id, "message_id": raw["message_id"]},
                       raw["sender_id"], control=True)
-        if raw["message_id"] in self._seen:  # inclui retransmissão cujo HOP_ACK se perdeu
+        # Repetida = retransmissão cujo HOP_ACK se perdeu (mesmo nº de saltos). Uma mensagem pode
+        # voltar legitimamente por um nó (o destino acoplou do outro lado), com mais saltos.
+        key = raw["message_id"] if raw["destination"] == self.node_id else f"{raw['message_id']}@{raw['hops']}"
+        if key in self._seen:
             self._redundant()
             return
-        self._seen.add(raw["message_id"])
+        self._seen.add(key)
         if raw["destination"] == self.node_id:
             self._deliver(raw)
             return

@@ -35,6 +35,33 @@ TREE_NEIGHBORS: Dict[int, List[int]] = {n: [] for n in CORE}
 for _a, _b in TREE_EDGES:
     TREE_NEIGHBORS[_a].append(_b)
     TREE_NEIGHBORS[_b].append(_a)
+# Distância em saltos na árvore (plano compartilhado: a árvore é fixa)
+def _tree_distances(source: int) -> Dict[int, int]:
+    hops = {source: 0}
+    frontier = [source]
+    while frontier:
+        nxt = []
+        for node in frontier:
+            for peer in TREE_NEIGHBORS[node]:
+                if peer not in hops:
+                    hops[peer] = hops[node] + 1
+                    nxt.append(peer)
+        frontier = nxt
+    return hops
+
+
+TREE_DISTANCE: Dict[int, Dict[int, int]] = {n: _tree_distances(n) for n in CORE}
+
+# Pub/Sub: PSPeers no líder C1 e a 2 saltos em cada asa (C3, C7): todo nó do Core
+# fica a ≤ 2 saltos de um PSPeer.
+PSPEERS = (0, 2, 6)
+PSPEER_ANY = -1  # destino "PSPeer mais próximo do 1º nó do Core" (pedidos de satélite)
+
+
+def nearest_pspeer(core: int) -> int:
+    return min(PSPEERS, key=lambda p: (TREE_DISTANCE[core][p], p))
+
+
 # Líder de mobilidade de cada nó (cascata pela árvore; o ápice não segue ninguém)
 FORMATION_PARENT = {1: 0, 2: 1, 3: 2, 4: 3, 5: 0, 6: 5, 7: 6, 8: 7}
 
@@ -47,6 +74,13 @@ def label(node_id: int) -> str:
 
 def role(node_id: int) -> str:
     return "core" if node_id in CORE else "satellite"
+
+
+def region(node_id: int) -> str:
+    """Região de origem no Pub/Sub: eixo do satélite (N/E/S/W) ou C (Core)."""
+    if node_id in CORE:
+        return "C"
+    return {0: "E", 90: "N", 180: "W", 270: "S"}[SATELLITE_AXES[node_id]]
 
 
 # ── Geometria do V (referencial que gira com a formação) ──────────────────

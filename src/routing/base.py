@@ -87,8 +87,15 @@ class RoutingMixin:
     # ── Criação, envio e entrega ──────────────────────────────────────────
 
     def _on_traffic(self, destination: int, name: str) -> None:
+        message = self._new_message(destination, name)
+        METRICS.created += 1
+        self._note("created", f"Criou {name}", "created")
+        self._outbox.append(message)
+        self._flush_outbox()
+
+    def _new_message(self, destination: int, name: str) -> m.DataMessage:
         self._sequence += 1
-        message: m.DataMessage = {
+        return {
             "msg_type": m.DATA,
             "message_id": f"{self.node_id}:{self._sequence}",
             "name": name,
@@ -98,10 +105,6 @@ class RoutingMixin:
             "created_at": self.provider.current_time(),
             "hops": 0,
         }
-        METRICS.created += 1
-        self._note("created", f"Criou {name}", "created")
-        self._outbox.append(message)
-        self._flush_outbox()
 
     def _flush_outbox(self) -> None:
         if not self._outbox or not self._can_originate():

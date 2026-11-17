@@ -76,6 +76,14 @@ FAILURE_PERIOD = 30.0         # s entre o início de duas falhas (a 1ª em t = 3
 FAILURE_DURATION = 1.0        # s
 FAILURE_SEED = 2026
 
+# ── Pub/Sub (T2, ver `pubsub.py`) ──────────────────────────────────────────
+PS_TOPICS = ["T1", "T2"]
+PS_REGIONS = ["N", "E", "S", "W", "C"]   # região de origem: eixo do satélite ou C (Core)
+PS_INTERVAL = 5.0             # s entre sorteios de assinatura/publicação de cada nó
+PS_SUBSCRIBE_PROB = 0.05      # chance de uma assinatura nova por sorteio (todos os nós)
+PS_PUBLISH_PROB = 0.2         # chance de uma publicação por sorteio (nós do Core; satélites publicam ao acoplar)
+PS_SEED = 2026
+
 # ── Energia (unidades arbitrárias; mobilidade é igual em todos) ───────────
 E_TX = 1.0
 E_RX = 0.5

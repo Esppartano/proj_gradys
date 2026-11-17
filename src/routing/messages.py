@@ -38,6 +38,8 @@ class DataMessage(TypedDict, total=False):
     dest_pos: Position      # posição prevista do destino pelo plano compartilhado
     mode: str               # "greedy" (a caminho) ou "zone" (inundação na zona-alvo)
     route: List[int]        # caminho achado pela busca de rota (contorno de vazio)
+    # Pub/Sub sobre SwCore
+    ps: dict                # conteúdo de pub/sub: request, sync ou notify (ver `pubsub.py`)
 
 
 class BundleMessage(TypedDict):

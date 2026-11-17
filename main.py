@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from src.motor import print_table, run, write_table_to_file
+from src.motor import print_pubsub, print_table, run, write_table_to_file
 from src.nodes import PROTOCOLS
 
 SCENARIOS = {
@@ -25,13 +25,18 @@ SCENARIOS = {
     "4": ("SwCore (árvore do Swarm Core + tabela de alcance)", "swcore"),
 }
 BENCHMARK = "5"
+PUBSUB = {"6": ("Pub/Sub sobre SwCore (T2)", "pubsub")}
 RESULTS_FILE = Path(__file__).resolve().parent / "results.md"  # sempre na raiz do projeto
-USAGE = "Uso: python main.py <opcao: 1-5> [modo: 1-2]"
+USAGE = "Uso: python main.py <opcao: 1-6> [modo: 1-2]"
 
 
 def run_scenario(option: str, viz: bool) -> None:
-    _, protocol = SCENARIOS[option]
-    print_table([{"protocol": protocol, **run(protocol, viz)}])
+    _, protocol = {**SCENARIOS, **PUBSUB}[option]
+    summary = run(protocol, viz)
+    if protocol == "pubsub":
+        print_pubsub(summary)
+    else:
+        print_table([{"protocol": protocol, **summary}])
 
 
 def run_benchmark() -> None:
@@ -80,8 +85,8 @@ def main():
         if option == BENCHMARK:
             run_benchmark()
             return
-        if option not in SCENARIOS:
-            print(f"\n[ERRO] Opção CLI '{option}' inválida! Escolha um valor entre 1 e 5.\n{USAGE}")
+        if option not in SCENARIOS and option not in PUBSUB:
+            print(f"\n[ERRO] Opção CLI '{option}' inválida! Escolha um valor entre 1 e 6.\n{USAGE}")
             sys.exit(1)
         mode = sys.argv[2].strip() if len(sys.argv) > 2 else "1"
         if mode not in ("1", "2"):
@@ -100,10 +105,12 @@ def main():
         for key, (name, _) in SCENARIOS.items():
             print(f"{key} - {name}")
         print(f"{BENCHMARK} - Benchmark Comparativo (todos, modo rápido)")
+        for key, (name, _) in PUBSUB.items():
+            print(f"{key} - {name}")
         print("0 - Sair")
 
         try:
-            option = input("\nOpção (0-5): ").strip()
+            option = input("\nOpção (0-6): ").strip()
         except (EOFError, KeyboardInterrupt):
             print("\nEncerrando simulador.")
             break
@@ -111,7 +118,7 @@ def main():
         if option == "0":
             print("\nEncerrando simulador.")
             break
-        elif option in SCENARIOS:
+        elif option in SCENARIOS or option in PUBSUB:
             viz = prompt_mode()
             if viz is None:
                 continue
@@ -123,7 +130,7 @@ def main():
             if not pause():
                 break
         else:
-            print(f"\n[AVISO] Opção '{option}' inválida! Por favor, escolha um número de 0 a 5.")
+            print(f"\n[AVISO] Opção '{option}' inválida! Por favor, escolha um número de 0 a 6.")
 
 
 if __name__ == "__main__":

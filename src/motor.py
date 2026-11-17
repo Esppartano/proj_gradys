@@ -18,6 +18,7 @@ from src.config import (
 )
 from src import eventlog
 from src.metrics import METRICS
+from src.pubsub import PS_METRICS
 from src.nodes import make_node
 from src.pacing import PacingHandler
 from src.scenario import ALL_NODES, DOCK_RADIUS, initial_position
@@ -26,6 +27,7 @@ from src.scenario import ALL_NODES, DOCK_RADIUS, initial_position
 def run(protocol: str, viz: bool) -> Dict[str, float]:
     """Roda um cenário e grava o log de eventos em logs/<protocolo>.log."""
     METRICS.reset()
+    PS_METRICS.reset()
     duration = VIZ_DURATION if viz else SIMULATION_DURATION
     if duration < 2 * ROTATION_PERIOD:
         print(f"\n[AVISO] {duration / ROTATION_PERIOD:.0f} volta(s): a última volta só entrega, então "
@@ -65,7 +67,10 @@ def run(protocol: str, viz: bool) -> Dict[str, float]:
         builder.build().start_simulation()
     finally:
         summary = METRICS.summary()
-        eventlog.close_log(_table([{"protocol": protocol, **summary}]))
+        if protocol == "pubsub":
+            summary.update(PS_METRICS.summary())
+        eventlog.close_log(_ps_table(summary) if protocol == "pubsub"
+                          else _table([{"protocol": protocol, **summary}]))
     print(f"\n>>> Log de eventos salvo em: {log_path}\n")
     return summary
 
@@ -126,3 +131,37 @@ def write_table_to_file(results: List[Dict[str, float]], filename):
     """Grava a tabela de resultados seguida da legenda das colunas."""
     with open(filename, "w", encoding="utf-8") as f:
         f.write("# Resultados\n\n" + _table(results) + "\n\n" + _legend() + "\n")
+
+
+# Pub/Sub: (título, chave em PS_METRICS.summary(), formato)
+PS_COLUMNS = [
+    ("Publicações", "ps_pubs", "{}"),
+    ("Assinaturas", "ps_subs", "{}"),
+    ("Entregas esperadas", "ps_expected", "{}"),
+    ("Entregues", "ps_delivered", "{}"),
+    ("MDR%", "ps_mdr", "{:.1f}"),
+    ("Falso positivo", "ps_false_pos", "{}"),
+    ("Falso negativo", "ps_false_neg", "{}"),
+    ("Duplicadas", "ps_duplicates", "{}"),
+    ("Lat. média(s)", "ps_lat_mean", "{:.2f}"),
+    ("Lat. p95(s)", "ps_lat_p95", "{:.2f}"),
+    ("Lat. p99(s)", "ps_lat_p99", "{:.2f}"),
+    ("Saltos médios", "ps_hops_mean", "{:.2f}"),
+    ("Conv. assinatura(s)", "ps_sub_conv_mean", "{:.3f}"),
+    ("Tx dados", "data_tx", "{}"),
+    ("Tx controle", "control_tx", "{}"),
+    ("Retx salto", "hop_retx", "{}"),
+    ("Energia", "energy", "{:.0f}"),
+]
+
+
+def _ps_table(summary: Dict[str, float]) -> str:
+    return "\n".join([
+        "| " + " | ".join(t for t, *_ in PS_COLUMNS) + " |",
+        "|" + "|".join(" :---: " for _ in PS_COLUMNS) + "|",
+        "| " + " | ".join(_cell(summary[k], f) for _, k, f in PS_COLUMNS) + " |",
+    ])
+
+
+def print_pubsub(summary: Dict[str, float]) -> None:
+    print(_ps_table(summary))
