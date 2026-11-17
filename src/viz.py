@@ -20,6 +20,7 @@ COLOR_WING = (255, 255, 255)       # branco: asas do V
 COLOR_SATELLITE = (255, 220, 0)    # amarelo: satélite esperando, se afastando ou voltando
 COLOR_DOCKED = (255, 140, 0)       # laranja: satélite acoplado, trocando mensagens
 COLOR_CARRYING = (205, 133, 63)    # marrom-claro: carregando mensagens
+COLOR_FAILED = (110, 0, 0)         # vermelho-escuro: nó do Core incomunicável (falha)
 
 # Cores de evento (duram EVENT_HIGHLIGHT_S segundos)
 EVENT_COLORS = {
@@ -46,6 +47,8 @@ class SwarmVizMixin:
 
     def handle_timer(self, timer: str) -> None:
         super().handle_timer(timer)
+        if timer in ("failure", "failure_end"):
+            self._repaint()
         if timer == "repaint":
             self._repaint()
             self.provider.schedule_timer("repaint", self.provider.current_time() + REPAINT_INTERVAL)
@@ -80,6 +83,8 @@ class SwarmVizMixin:
                 + len(self._outbox))
 
     def _color(self):
+        if self.radio_down:
+            return COLOR_FAILED
         if self.last_event and self.provider.current_time() - self.last_event[2] <= EVENT_HIGHLIGHT_S:
             color = EVENT_COLORS.get(self.last_event[0])
             if color:
@@ -104,6 +109,7 @@ class SwarmVizMixin:
         if self.role == "core":
             parent = FORMATION_PARENT.get(self.node_id)
             hud["Formação"] = "líder (plano)" if parent is None else f"segue {label(parent)}"
+            hud["Rádio"] = "FALHA (incomunicável)" if self.radio_down else "ok"
             hud["Satélites ligados"] = ", ".join(label(e) for e in self.tethered) or "-"
         else:
             hud["Estado"] = self.flight

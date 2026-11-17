@@ -9,6 +9,8 @@ Camada comum a todos os protocolos (não entra nas métricas de roteamento):
   V, usando só o beacon do pai (posição e ângulo). O atraso do beacon é
   compensado pela lei de rotação do plano (centro e ω), não por velocidade
   medida — extrapolar velocidade amplificava o erro ao longo da cascata.
+- Falha de core (regra do T2): enquanto `scenario.failed_core` aponta para
+  este nó, ele não transmite nem recebe nada (`_transmit` e `handle_packet`).
 - Satélites: esperam parados no ponto de acoplamento do seu eixo (5 m além do
   perímetro da formação). Descobrem os nós do Core pelo rádio (30 m) e acoplam
   no que passa pelo ponto (a até DOCK_CAPTURE m: uma das pontas do V),
@@ -30,8 +32,8 @@ from gradysim.protocol.messages.mobility import GotoCoordsMobilityCommand, SetSp
 from gradysim.protocol.messages.telemetry import Telemetry
 
 from src.config import (
-    CONTACT_DWELL, CONTACT_GAP, CORE_SPEED, DOCK_CAPTURE, LINK_BEACON, LINK_TIMEOUT, ROTATION_OMEGA,
-    SATELLITE_PAIRS, SATELLITE_SPEED,
+    CONTACT_DWELL, CONTACT_GAP, CORE_SPEED, DOCK_CAPTURE, FAILURE_DURATION, FAILURE_PERIOD, LINK_BEACON,
+    LINK_TIMEOUT, ROTATION_OMEGA, SATELLITE_PAIRS, SATELLITE_SPEED,
 )
 from src import config, eventlog, scenario as sc
 
@@ -84,6 +86,8 @@ class SwarmNode(IProtocol):
             self.provider.schedule_timer("move", SATELLITE_STEP)
         else:
             self.provider.schedule_timer("move", CORE_STEP)
+            if config.CORE_FAILURE:
+                self.provider.schedule_timer("failure", FAILURE_PERIOD)
         self.provider.schedule_timer("link_beacon", 0.01 * self.node_id)
 
     # ── Ganchos do roteamento ─────────────────────────────────────────────
@@ -122,12 +126,24 @@ class SwarmNode(IProtocol):
     def neighbors(self) -> Dict[int, Neighbor]:
         return {p: n for p, n in self._links.items() if self._alive(p)}
 
+    @property
+    def radio_down(self) -> bool:
+        """Este nó está na janela de falha (incomunicável)."""
+        return sc.failed_core(self.provider.current_time()) == self.node_id
+
+    def _transmit(self, command) -> bool:
+        """Único ponto de saída do rádio; retorna False se o nó está incomunicável."""
+        if self.radio_down:
+            return False
+        self.provider.send_communication_command(command)
+        return True
+
     def _send_raw(self, payload: dict, destination: Optional[int] = None) -> None:
         message = json.dumps(payload)
         if destination is None:
-            self.provider.send_communication_command(BroadcastMessageCommand(message))
+            self._transmit(BroadcastMessageCommand(message))
         else:
-            self.provider.send_communication_command(SendMessageCommand(message, destination))
+            self._transmit(SendMessageCommand(message, destination))
 
     def _link_beacon(self) -> None:
         now = self.provider.current_time()
@@ -284,6 +300,13 @@ class SwarmNode(IProtocol):
         if timer == "link_beacon":
             self._link_beacon()
             self.provider.schedule_timer("link_beacon", now + LINK_BEACON[self.role])
+        elif timer == "failure":  # só registra; quem corta o rádio é `radio_down`
+            if self.radio_down:
+                self._log("Falha: incomunicável")
+                self.provider.schedule_timer("failure_end", now + FAILURE_DURATION)
+            self.provider.schedule_timer("failure", now + FAILURE_PERIOD)
+        elif timer == "failure_end":
+            self._log("Fim da falha: rádio de volta")
         elif timer == "undock":
             if self.flight == "contato" and now >= self._contact_end:
                 self._undock()
@@ -302,6 +325,8 @@ class SwarmNode(IProtocol):
         self._position = tuple(telemetry.current_position)
 
     def handle_packet(self, message: str) -> None:
+        if self.radio_down:
+            return
         try:
             raw = json.loads(message)
         except json.JSONDecodeError:

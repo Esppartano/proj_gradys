@@ -129,12 +129,12 @@ class RoutingMixin:
             )
 
     def _broadcast(self, message: dict, control: bool = False) -> None:
-        self._count_tx(control, 1)
-        self.provider.send_communication_command(BroadcastMessageCommand(json.dumps(message)))
+        if self._transmit(BroadcastMessageCommand(json.dumps(message))):
+            self._count_tx(control, 1)
 
     def _unicast(self, message: dict, destination: int, control: bool = False, payload: int = 1) -> None:
-        self._count_tx(control, payload)
-        self.provider.send_communication_command(SendMessageCommand(json.dumps(message), destination))
+        if self._transmit(SendMessageCommand(json.dumps(message), destination)):
+            self._count_tx(control, payload)
 
     @staticmethod
     def _count_tx(control: bool, payload: int) -> None:

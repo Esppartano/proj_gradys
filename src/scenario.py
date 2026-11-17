@@ -11,7 +11,10 @@ IDs: 0..8 = Core (C1 ápice, C2..C5 asa direita, C6..C9 asa esquerda),
 9..12 = satélites (S1 leste, S2 norte, S3 oeste, S4 sul).
 """
 from math import cos, hypot, radians, sin
-from typing import Dict, List, Tuple
+from random import Random
+from typing import Dict, List, Optional, Tuple
+
+from src import config
 
 from src.config import (
     AWAY_DISTANCE, CENTER, CORE_ALT, DOCK_MARGIN, L, ROTATION_OMEGA,
@@ -91,6 +94,19 @@ def slot_offset(child: int, parent: int, angle: float) -> Tuple[float, float]:
 # Perímetro externo varrido pela rotação: o raio do nó mais afastado do centro
 PERIMETER_RADIUS = max(hypot(*uv) for uv in V_SLOTS.values())
 DOCK_RADIUS = PERIMETER_RADIUS + DOCK_MARGIN
+
+
+# ── Falha de core ──────────────────────────────────────────────────────────
+
+def failed_core(t: float) -> Optional[int]:
+    """Nó do Core incomunicável no instante t (None se nenhum). Simula o canal:
+    nenhum protocolo consulta isto para decidir rotas."""
+    if not config.CORE_FAILURE:
+        return None
+    k = int(t // config.FAILURE_PERIOD)
+    if k == 0 or t - k * config.FAILURE_PERIOD >= config.FAILURE_DURATION:
+        return None
+    return Random(config.FAILURE_SEED * 1000 + k).choice(CORE)
 
 
 # ── Satélites ──────────────────────────────────────────────────────────────

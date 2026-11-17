@@ -65,6 +65,15 @@ GEO_DEST_RADIUS = 10.0        # m: raio da zona-alvo (esfera) em torno da posiç
 GEO_SEARCH_MARGIN = 4 * L     # m: a busca de rota pode recuar até isso além da distância do nó preso
 GEO_SEARCH_TIMEOUT = 0.5      # s esperando resposta da busca (ida e volta de ~10 saltos ≈ 0,2 s)
 
+# ── Falha de core (regra do T2) ───────────────────────────────────────────
+# A cada FAILURE_PERIOD s, um nó do Core sorteado fica incomunicável (não envia
+# nem recebe nada: vizinhos do Core e satélites) por FAILURE_DURATION s. O
+# sorteio usa FAILURE_SEED: a mesma sequência de falhas em todos os protocolos.
+CORE_FAILURE = True
+FAILURE_PERIOD = 30.0         # s entre o início de duas falhas (a 1ª em t = 30 s)
+FAILURE_DURATION = 1.0        # s
+FAILURE_SEED = 2026
+
 # ── Energia (unidades arbitrárias; mobilidade é igual em todos) ───────────
 E_TX = 1.0
 E_RX = 0.5
