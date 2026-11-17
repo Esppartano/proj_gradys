@@ -91,6 +91,7 @@ COLUMNS = [
     ("Contornos", "bypasses", "{}", "GeoCast: vazios de cobertura contornados pela busca de rota (Choi et al.)."),
     ("Sem rota", "no_route", "{}", "GeoCast: mensagens descartadas num vazio de cobertura que a busca de rota não conseguiu contornar."),
     ("ACKs origem", "acks_received", "{}", "Flooding: confirmações do receptor que chegaram de volta à origem."),
+    ("Retx salto", "hop_retx", "{}", "SwCore: retransmissões de um dado por falta de confirmação (HOP_ACK) do próximo salto, ex.: vizinho em falha."),
     ("Energia", "energy", "{:.0f}", "Energia de rádio: 1 por transmissão + 0,5 por recepção (unidades arbitrárias)."),
 ]
 

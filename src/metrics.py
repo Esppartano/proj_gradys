@@ -42,6 +42,7 @@ class RoutingMetrics:
     no_route: int = 0          # GeoCast: sem vizinho que avance e sem rota pela busca
     bypasses: int = 0          # GeoCast: vazios contornados pela busca de rota
     acks_received: int = 0     # Flooding: ACKs que chegaram de volta à origem
+    hop_retx: int = 0          # SwCore: retransmissões por falta de HOP_ACK do próximo salto
     latencies: Dict[str, float] = field(default_factory=dict)
     hops: Dict[str, int] = field(default_factory=dict)
 
@@ -83,6 +84,7 @@ class RoutingMetrics:
             "no_route": self.no_route,
             "bypasses": self.bypasses,
             "acks_received": self.acks_received,
+            "hop_retx": self.hop_retx,
             "energy": E_TX * tx + E_RX * self.rx,
         }
 

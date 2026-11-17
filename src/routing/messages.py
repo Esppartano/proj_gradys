@@ -14,8 +14,10 @@ GEO_REPLY = "geo_reply"    # resposta da busca, pelo caminho inverso (GeoCast)
 FLOOD_ACK = "flood_ack"    # confirmação do receptor, inundada de volta à origem (Flooding)
 REACH = "sw_reach"         # anúncio de alcance de um endpoint (SwCore)
 UNREACH = "sw_unreach"     # anúncio de perda de alcance (SwCore)
+SYNC = "sw_sync"           # tabela inteira, ao voltar a ouvir um vizinho da árvore (SwCore)
+HOP_ACK = "sw_hop_ack"     # confirmação de recepção de um dado, salto a salto (SwCore)
 
-CONTROL_TYPES = {SUMMARY, FLOOD_ACK, GEO_SEARCH, GEO_REPLY, REACH, UNREACH}
+CONTROL_TYPES = {SUMMARY, FLOOD_ACK, GEO_SEARCH, GEO_REPLY, REACH, UNREACH, SYNC, HOP_ACK}
 ROUTING_TYPES = {DATA, BUNDLE} | CONTROL_TYPES
 
 

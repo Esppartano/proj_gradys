@@ -63,6 +63,8 @@ FLOOD_TTL = 10                # diâmetro: satélite → ponta → ... → outra
 
 GEO_DEST_RADIUS = 10.0        # m: raio da zona-alvo (esfera) em torno da posição prevista do destino
 GEO_SEARCH_MARGIN = 4 * L     # m: a busca de rota pode recuar até isso além da distância do nó preso
+SW_HOP_ACK_TIMEOUT = 0.2     # s esperando o HOP_ACK do próximo salto antes de retransmitir (SwCore)
+
 GEO_SEARCH_TIMEOUT = 0.5      # s esperando resposta da busca (ida e volta de ~10 saltos ≈ 0,2 s)
 
 # ── Falha de core (regra do T2) ───────────────────────────────────────────
