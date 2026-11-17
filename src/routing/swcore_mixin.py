@@ -2,7 +2,8 @@
 SwCore: roteamento pela árvore geradora do Swarm Core, com tabela de alcance.
 
 Cada nó do Core conhece só os seus vizinhos na árvore (TREE_NEIGHBORS) e
-mantém, para cada satélite, uma entrada com o nº do handshake:
+mantém uma tabela com os outros 8 nós do Core e os satélites. Para cada
+satélite, a entrada guarda o nº do handshake:
   - "direct"   → AbleToDeliverDirectly (o satélite fez handshake comigo);
   - <vizinho>  → NextHop(Uy) na árvore;
   - None       → Unreachable.
@@ -10,6 +11,9 @@ mantém, para cada satélite, uma entrada com o nº do handshake:
 - Handshake (camada de enlace): o hub marca "direct" e anuncia REACH(ep, seq)
   pela árvore; cada receptor faz table[ep] = remetente e repassa aos outros
   vizinhos da árvore (sem laços: é uma árvore).
+- Nós do Core: ao ouvir pela 1ª vez um vizinho da árvore, o nó anuncia
+  REACH(ele mesmo, seq 0) a esse vizinho; o anúncio se espalha pela árvore
+  como o de um satélite, e cada nó aprende o próximo salto para os outros 8.
 - Despedida ou perda do satélite: o hub anuncia UNREACH(ep, seq). Anúncios
   com seq menor que o da entrada são descartados (velhos).
 - Dados: o satélite entrega ao seu hub. No Core, nesta ordem:
@@ -37,7 +41,7 @@ class SwCoreMixin(RoutingMixin):
 
     def initialize(self) -> None:
         super().initialize()
-        self.table: Dict[int, Tuple[Route, int]] = {}  # satélite → (rota, seq)
+        self.table: Dict[int, Tuple[Route, int]] = {}  # nó do Core ou satélite → (rota, seq)
         self._held: Dict[str, m.DataMessage] = {}      # id → mensagem guardada
 
     # ── Endpoints ─────────────────────────────────────────────────────────
@@ -61,6 +65,12 @@ class SwCoreMixin(RoutingMixin):
             if peer != exclude:
                 self._unicast({"msg_type": kind, "sender_id": self.node_id, "endpoint": endpoint, "seq": seq},
                               peer, control=True)
+
+    def _on_contact(self, peer: int) -> None:
+        super()._on_contact(peer)
+        if self.role == "core" and peer in TREE_NEIGHBORS[self.node_id]:
+            self._unicast({"msg_type": m.REACH, "sender_id": self.node_id, "endpoint": self.node_id, "seq": 0},
+                          peer, control=True)
 
     def _on_link_up(self, endpoint: int, seq: int) -> None:
         super()._on_link_up(endpoint, seq)
