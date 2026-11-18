@@ -146,7 +146,7 @@ PS_ROWS = [
     ("Falsos positivos", "ps_false_pos", "{}", "Entregas que a regra não exigia (o PSPeer ainda não conhecia o filtro novo do assinante)."),
     ("Falsos negativos", "ps_false_neg", "{}", "Entregas esperadas que não chegaram até o fim da simulação."),
     ("Duplicadas", "ps_duplicates", "{}", "Cópias extras da mesma publicação no mesmo assinante."),
-    ("Fora de ordem", "ps_out_of_order", "{}", "Entregas que chegaram depois de uma publicação mais nova do mesmo autor, para o mesmo assinante."),
+    ("Fora de ordem", "ps_out_of_order", "{}", "Entregas esperadas que chegaram depois de uma publicação mais nova do mesmo autor, para o mesmo assinante."),
     ("Fora de ordem (%)", "ps_out_of_order_pct", "{:.2f}", "Fora de ordem / entregas esperadas × 100 (sem falsos positivos)."),
     ("Latência média (s)", "ps_lat_mean", "{:.2f}", "Da criação da publicação à entrega (só entregas esperadas)."),
     ("Latência p95 (s)", "ps_lat_p95", "{:.2f}", "Percentil 95 da latência."),

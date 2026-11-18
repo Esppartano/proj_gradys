@@ -10,7 +10,7 @@
 | Falsos positivos | 89 | Entregas que a regra não exigia (o PSPeer ainda não conhecia o filtro novo do assinante). |
 | Falsos negativos | 0 | Entregas esperadas que não chegaram até o fim da simulação. |
 | Duplicadas | 0 | Cópias extras da mesma publicação no mesmo assinante. |
-| Fora de ordem | 359 | Entregas que chegaram depois de uma publicação mais nova do mesmo autor, para o mesmo assinante. |
+| Fora de ordem | 359 | Entregas esperadas que chegaram depois de uma publicação mais nova do mesmo autor, para o mesmo assinante. |
 | Fora de ordem (%) | 3.13 | Fora de ordem / entregas esperadas × 100 (sem falsos positivos). |
 | Latência média (s) | 4.40 | Da criação da publicação à entrega (só entregas esperadas). |
 | Latência p95 (s) | 23.87 | Percentil 95 da latência. |

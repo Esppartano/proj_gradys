@@ -1,7 +1,14 @@
-# T1 — Roteamento Swarm Core em Topologia V (GrADySim)
+# T1 e T2 — Swarm Core em Topologia V (GrADySim)
 
-T1 da disciplina INF2541 (PUC-Rio). Compara quatro protocolos de
-roteamento num enxame de drones simulado no [GrADySim](https://github.com/Project-GrADyS/gradys-sim-nextgen):
+Trabalhos da disciplina INF2541 (PUC-Rio), num enxame de drones simulado no
+[GrADySim](https://github.com/Project-GrADyS/gradys-sim-nextgen):
+
+- **T1:** compara quatro protocolos de roteamento ([RELATORIO.md](RELATORIO.md));
+- **T2:** Pub/Sub distribuído, por tópicos com filtro de região de origem,
+  sobre o SwCore, com falha periódica de um nó do Core
+  ([RELATORIO_T2.md](RELATORIO_T2.md)).
+
+Protocolos do T1:
 
 | Protocolo | Ideia |
 |---|---|
@@ -17,8 +24,18 @@ pontas do V passa, trocam mensagens, se afastam pelo próprio eixo e retornam.
 Rádio de 30 m.
 Todos os protocolos rodam com a mesma mobilidade e o mesmo tráfego.
 
+Regra do T2, ligada por padrão e válida para todos os protocolos: a cada 30 s,
+um nó do Core sorteado fica incomunicável por 1 s (`CORE_FAILURE` em
+`src/config.py`). Os resultados do [RELATORIO.md](RELATORIO.md) são da versão
+do T1 (branch `T1`), sem essa regra.
+
+No T2, os 13 nós assinam e publicam em tópicos; três nós do Core (C1, C3 e
+C7) são PSPeers, guardam o estado replicado e enviam as notificações pelo
+SwCore.
+
 Detalhes do cenário, das decisões de projeto, dos resultados e das
-referências: **[RELATORIO.md](RELATORIO.md)**.
+referências: **[RELATORIO.md](RELATORIO.md)** (T1) e
+**[RELATORIO_T2.md](RELATORIO_T2.md)** (T2).
 
 ## Requisitos
 
@@ -45,6 +62,7 @@ python main.py              # menu interativo
 python main.py 5            # benchmark dos 4 protocolos, modo rápido (sem browser, ≈ 1 min)
 python main.py 4 1          # SwCore no visualizador 3D (abre o browser; 30× mais rápido)
 python main.py 3 2          # DTN em modo rápido
+python main.py 6 2          # Pub/Sub sobre SwCore (T2) em modo rápido
 ```
 
 Formato dos atalhos: `python main.py <opção> [modo]`
@@ -56,6 +74,7 @@ Formato dos atalhos: `python main.py <opção> [modo]`
 | 3 | DTN |
 | 4 | SwCore |
 | 5 | Benchmark (todos) |
+| 6 | Pub/Sub sobre SwCore (T2) |
 
 Modo: `1` = visualizador 3D (padrão) · `2` = rápido, sem browser.
 
@@ -70,6 +89,9 @@ necessárias pelo menos 2 voltas.
 
 - **`results.md`**: tabela comparativa com a legenda de cada coluna. É gerada
   pelo benchmark (opção 5).
+- **`results_pubsub.md`**: métricas do Pub/Sub (MDR, falsos positivos e
+  negativos, latência, recuperação após falha…) com a descrição de cada uma.
+  É gerada pela opção 6 no modo rápido.
 - **`logs/<protocolo>.log`**: eventos de cada execução (criação, repasse,
   entrega, conexão dos satélites…), um por linha. Fica fora do git.
 
@@ -85,6 +107,7 @@ necessárias pelo menos 2 voltas.
 | Vermelho | Descartou mensagem (TTL esgotado; no GeoCast, também sem rota) |
 | Cinza-grafite | Podou a retransmissão: todos os vizinhos já ouviram (Flooding) ou fora da zona-alvo (GeoCast) |
 | Verde-claro / vermelho-claro | Anunciou alcance / perda de alcance de um satélite (SwCore) |
+| Vermelho-escuro | Nó do Core em falha (incomunicável por 1 s) |
 
 O painel **Panel** (canto inferior direito) mostra o estado de cada nó. O
 número é o ID: 0–8 = C1–C9, 9–12 = S1–S4.
@@ -99,5 +122,6 @@ número é o ID: 0–8 = C1–C9, 9–12 = S1–S4.
 | `src/node.py`, `src/nodes.py` | Camada comum (beacons, formação em cascata, handshake e ciclo dos satélites) e a montagem do nó de cada protocolo |
 | `src/pacing.py` | Ritmo acelerado do modo 3D |
 | `src/routing/` | Um mixin por protocolo, mais a base comum e os formatos de mensagem |
+| `src/pubsub.py` | Pub/Sub do T2: clientes, PSPeers, regra de entrega e métricas |
 | `src/metrics.py`, `src/motor.py` | Métricas, execução da simulação e tabela |
 | `src/viz.py`, `src/eventlog.py` | Visualização 3D e log em arquivo |
