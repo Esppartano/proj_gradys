@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from src.motor import print_pubsub, print_table, run, write_table_to_file
+from src.motor import print_pubsub, print_table, run, write_pubsub_to_file, write_table_to_file
 from src.nodes import PROTOCOLS
 
 SCENARIOS = {
@@ -27,6 +27,7 @@ SCENARIOS = {
 BENCHMARK = "5"
 PUBSUB = {"6": ("Pub/Sub sobre SwCore (T2)", "pubsub")}
 RESULTS_FILE = Path(__file__).resolve().parent / "results.md"  # sempre na raiz do projeto
+PUBSUB_RESULTS_FILE = RESULTS_FILE.with_name("results_pubsub.md")
 USAGE = "Uso: python main.py <opcao: 1-6> [modo: 1-2]"
 
 
@@ -35,6 +36,9 @@ def run_scenario(option: str, viz: bool) -> None:
     summary = run(protocol, viz)
     if protocol == "pubsub":
         print_pubsub(summary)
+        if not viz:  # o modo 3D tem outra duração: não sobrescreve os resultados
+            write_pubsub_to_file(summary, PUBSUB_RESULTS_FILE)
+            print(f"\nTabela salva em {PUBSUB_RESULTS_FILE}")
     else:
         print_table([{"protocol": protocol, **summary}])
 

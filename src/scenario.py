@@ -140,7 +140,20 @@ def failed_core(t: float) -> Optional[int]:
     k = int(t // config.FAILURE_PERIOD)
     if k == 0 or t - k * config.FAILURE_PERIOD >= config.FAILURE_DURATION:
         return None
+    return _failure_core(k)
+
+
+def _failure_core(k: int) -> int:
     return Random(config.FAILURE_SEED * 1000 + k).choice(CORE)
+
+
+def failure_windows(duration: float) -> List[Tuple[float, float, int]]:
+    """Falhas que começam antes de `duration`: (início, fim, nó do Core). Só para métricas."""
+    if not config.CORE_FAILURE:
+        return []
+    count = int((duration - 1e-9) // config.FAILURE_PERIOD)
+    return [(k * config.FAILURE_PERIOD, k * config.FAILURE_PERIOD + config.FAILURE_DURATION, _failure_core(k))
+            for k in range(1, count + 1)]
 
 
 # ── Satélites ──────────────────────────────────────────────────────────────

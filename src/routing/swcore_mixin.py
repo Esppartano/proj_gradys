@@ -116,6 +116,7 @@ class SwCoreMixin(RoutingMixin):
 
     def _on_announce(self, raw: dict) -> None:
         if raw["msg_type"] == m.SYNC:
+            METRICS.syncs.append((self.provider.current_time(), self.node_id, raw["sender_id"]))
             for endpoint, kind, seq in raw["entries"]:
                 self._apply(kind, endpoint, seq, raw["sender_id"])
         else:
@@ -181,6 +182,7 @@ class SwCoreMixin(RoutingMixin):
         if kind == m.HOP_ACK:
             if self._unacked.get(raw["message_id"], (None, None))[1] == raw["sender_id"]:
                 del self._unacked[raw["message_id"]]
+                METRICS.acks.append((self.provider.current_time(), self.node_id, raw["sender_id"]))
             return
         if kind != m.DATA:
             return

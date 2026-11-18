@@ -21,11 +21,13 @@ Definições
 - Energia: E_TX·(tx dados + tx controle) + E_RX·rx. A energia de movimento é
   igual em todos os protocolos (mesma mobilidade) e não entra na comparação.
 """
+from bisect import bisect_left
 from dataclasses import dataclass, field
 from statistics import mean, median
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 from src.config import E_RX, E_TX
+from src.scenario import TREE_NEIGHBORS, failure_windows
 
 
 @dataclass
@@ -45,9 +47,42 @@ class RoutingMetrics:
     hop_retx: int = 0          # SwCore: retransmissões por falta de HOP_ACK do próximo salto
     latencies: Dict[str, float] = field(default_factory=dict)
     hops: Dict[str, int] = field(default_factory=dict)
+    # SwCore, para o tempo de recuperação após falha: (instante, receptor, remetente)
+    syncs: List[Tuple[float, int, int]] = field(default_factory=list)  # SYNC aplicado
+    acks: List[Tuple[float, int, int]] = field(default_factory=list)   # HOP_ACK que confirmou um dado
 
     def reset(self) -> None:
         self.__init__()
+
+    def recovery(self, duration: float) -> Dict[str, float]:
+        """Para cada falha de core (janela [início, fim)), quanto tempo após o fim:
+        - roteamento: até o core e cada vizinho da árvore aplicarem o SYNC um do
+          outro (tabela ressincronizada nos dois sentidos);
+        - dados: até o primeiro dado confirmado (HOP_ACK) enviado pelo core ou a ele.
+        Falhas sem o evento até o fim da simulação ficam de fora da média."""
+        sync_times = [t for t, _, _ in self.syncs]
+        ack_times = [t for t, _, _ in self.acks]
+        routing, data = [], []
+        windows = failure_windows(duration)
+        for _, end, core in windows:  # só eventos após o fim (ignora pacotes em voo no início)
+            pending = {(core, p) for p in TREE_NEIGHBORS[core]} | {(p, core) for p in TREE_NEIGHBORS[core]}
+            for t, receiver, sender in self.syncs[bisect_left(sync_times, end):]:
+                pending.discard((receiver, sender))
+                if not pending:
+                    routing.append(t - end)
+                    break
+            for t, receiver, sender in self.acks[bisect_left(ack_times, end):]:
+                if core in (receiver, sender):
+                    data.append(t - end)
+                    break
+        nan = float("nan")
+        return {
+            "failures": len(windows),
+            "rec_routing_mean": mean(routing) if routing else nan,
+            "rec_routing_max": max(routing) if routing else nan,
+            "rec_data_mean": mean(data) if data else nan,
+            "rec_data_max": max(data) if data else nan,
+        }
 
     def record_delivery(self, message: dict, now: float) -> bool:
         """Registra a chegada ao destino; retorna True só na primeira vez."""

@@ -102,7 +102,8 @@ class PubSubMetrics:
     subs: Dict[Tuple[int, str], List[Tuple[float, str, List[str]]]] = field(default_factory=dict)
     sub_created: Dict[str, float] = field(default_factory=dict)
     sub_known: Dict[str, List[float]] = field(default_factory=dict)  # instantes em que cada PSPeer soube
-    deliveries: Dict[Tuple[int, str], float] = field(default_factory=dict)  # (assinante, pub) → latência
+    # (assinante, pub) → latência, na ordem de chegada (dict preserva a ordem de inserção)
+    deliveries: Dict[Tuple[int, str], float] = field(default_factory=dict)
     hops: Dict[Tuple[int, str], int] = field(default_factory=dict)
     duplicates: int = 0
 
@@ -130,15 +131,32 @@ class PubSubMetrics:
         self.hops[key] = hops
         return True
 
+    def out_of_order(self, hits: Set[Tuple[int, str]]) -> int:
+        """Entregas (esperadas) que chegaram depois de uma publicação mais nova do
+        mesmo autor, para o mesmo assinante."""
+        newest: Dict[Tuple[int, int], float] = {}
+        late = 0
+        for subscriber, pub_id in self.deliveries:  # ordem de chegada
+            if (subscriber, pub_id) not in hits:
+                continue
+            pub = self.pubs[pub_id]
+            pair = (subscriber, pub["publisher"])
+            if pub["created_at"] < newest.get(pair, float("-inf")):
+                late += 1
+            else:
+                newest[pair] = pub["created_at"]
+        return late
+
     def expected(self) -> Set[Tuple[int, str]]:
         return {(s, pub["id"]) for pub in self.pubs.values()
                 for (s, t), history in self.subs.items()
                 if t == pub["topic"] and matches(history, s, pub)}
 
-    def summary(self) -> Dict[str, float]:
+    def summary(self, duration: float) -> Dict[str, float]:
         expected, delivered = self.expected(), set(self.deliveries)
         hits = delivered & expected  # latência e saltos só das entregas esperadas (sem falsos positivos)
         lat = sorted(self.deliveries[k] for k in hits)
+        late = self.out_of_order(hits)
         converged = [max(times) - self.sub_created[sid]
                      for sid, times in self.sub_known.items() if len(times) == len(PSPEERS)]
 
@@ -154,6 +172,9 @@ class PubSubMetrics:
             "ps_false_pos": len(delivered - expected),
             "ps_false_neg": len(expected - delivered),
             "ps_duplicates": self.duplicates,
+            "ps_out_of_order": late,
+            "ps_out_of_order_pct": 100.0 * late / len(hits) if hits else float("nan"),
+            "ps_throughput": len(hits) / (duration / 60.0),
             "ps_lat_mean": mean(lat) if lat else float("nan"),
             "ps_lat_p95": pct(0.95),
             "ps_lat_p99": pct(0.99),
