@@ -67,6 +67,14 @@ SW_HOP_ACK_TIMEOUT = 0.2     # s esperando o HOP_ACK do próximo salto antes de 
 
 GEO_SEARCH_TIMEOUT = 0.5      # s esperando resposta da busca (ida e volta de ~10 saltos ≈ 0,2 s)
 
+# SwCore do professor (`routing/swcore_professor.py`); valores do repositório original,
+# exceto SWCORE_MAX_HOPS: lá o Core tem diâmetro menor; aqui o V tem 8 saltos de ponta
+# a ponta, e o upload já conta 1 (satélite → hub ... → outra ponta = 9; entrega = 10).
+SWCORE_MAX_HOPS = 10
+SWCORE_RETRY_INTERVAL = 0.25  # s entre novas tentativas das mensagens guardadas no Core
+SWCORE_RT_CHECK_INTERVAL = 0.1  # s entre verificações de vizinho perdido (atualização imediata da RT)
+NEIGHBOR_TIMEOUT = 0.4        # s sem beacon → vizinho perdido para o roteamento (a formação usa LINK_TIMEOUT)
+
 # ── Falha de core (regra do T2) ───────────────────────────────────────────
 # A cada FAILURE_PERIOD s, um nó do Core sorteado fica incomunicável (não envia
 # nem recebe nada: vizinhos do Core e satélites) por FAILURE_DURATION s. O

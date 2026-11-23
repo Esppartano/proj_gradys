@@ -21,7 +21,7 @@ from src.metrics import METRICS
 from src.pubsub import PS_METRICS
 from src.nodes import make_node
 from src.pacing import PacingHandler
-from src.scenario import ALL_NODES, DOCK_RADIUS, initial_position
+from src.scenario import ALL_NODES, DOCK_RADIUS, initial_position, role
 
 
 def run(protocol: str, viz: bool) -> Dict[str, float]:
@@ -43,9 +43,9 @@ def run(protocol: str, viz: bool) -> Dict[str, float]:
         execution_logging=False,
     ))
 
-    Node = make_node(protocol, viz)
+    classes = {r: make_node(protocol, viz, r) for r in ("core", "satellite")}
     for node_id in ALL_NODES:  # a ordem de criação define os IDs (0..8 = Core, 9..12 = satélites)
-        builder.add_node(Node, initial_position(node_id))
+        builder.add_node(classes[role(node_id)], initial_position(node_id))
 
     builder.add_handler(TimerHandler())
     builder.add_handler(MobilityHandler(MobilityConfiguration(update_rate=MOBILITY_UPDATE)))

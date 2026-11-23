@@ -13,7 +13,7 @@ from src.scenario import APEX, FORMATION_PARENT, label
 REPAINT_INTERVAL = VIZ_SPEEDUP  # s simulados: ≈ 1 repintura por segundo na tela
 
 PROTOCOL_NAMES = {"flooding": "Flooding", "geocast": "GeoCast", "dtn": "DTN", "swcore": "SwCore",
-                  "pubsub": "Pub/Sub sobre SwCore"}
+                  "pubsub": "Pub/Sub sobre SwCore", "swcore_prof": "SwCore do professor"}
 
 # Cores por papel (RGB 0-255)
 COLOR_APEX = (160, 32, 240)        # roxo: líder de mobilidade C1
@@ -79,9 +79,9 @@ class SwarmVizMixin:
         if self.role == "satellite":  # só o que ainda não chegou ao hub
             handed = set().union(*getattr(self, "_peer_has", {}).values())
             pending = [i for i in getattr(self, "_buffer", ()) if i not in handed]
-            return len(self._outbox) + len(pending)
+            return len(self._outbox) + len(pending) + len(getattr(self, "_pending_uploads", ()))
         return (len(getattr(self, "_buffer", ())) + len(getattr(self, "_held", ()))
-                + len(self._outbox))
+                + len(getattr(self, "_core_buffer", ())) + len(self._outbox))
 
     def _color(self):
         if self.radio_down:
@@ -121,6 +121,10 @@ class SwarmVizMixin:
             hud["Tabela"] = "; ".join(
                 f"{label(e)}:{'direto' if r == 'direct' else ('-' if r is None else label(r))}"
                 for e, (r, _) in sorted(self.table.items()))
+        if hasattr(self, "nearest_pspeer"):  # SwCore do professor
+            peer, path = (None, []) if self.radio_down else self.nearest_pspeer()
+            hud["PSPeer mais próximo"] = ("-" if peer is None else
+                                          " → ".join(label(n) for n in [self.node_id] + path))
         if self.last_event:
             _, text, at = self.last_event
             hud["Último evento"] = f"t={at:.1f}s: {text}"

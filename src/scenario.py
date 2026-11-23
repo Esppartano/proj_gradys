@@ -83,6 +83,9 @@ def region(node_id: int) -> str:
     return {0: "E", 90: "N", 180: "W", 270: "S"}[SATELLITE_AXES[node_id]]
 
 
+SAT_BY_REGION: Dict[str, int] = {region(s): s for s in SATELLITES}  # eixo → satélite
+
+
 # ── Geometria do V (referencial que gira com a formação) ──────────────────
 #   u = lateral (perpendicular ao eixo do V); v = recuo atrás do ápice, ao longo
 #   do eixo. A origem é o centroide do V: a formação gira em torno dele, e as

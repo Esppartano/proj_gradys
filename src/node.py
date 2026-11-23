@@ -43,12 +43,13 @@ ARRIVED = 0.5                 # m: considera que chegou ao ponto
 
 
 class Neighbor:
-    __slots__ = ("role", "position", "angle", "heard_at")
+    __slots__ = ("role", "position", "angle", "rt", "heard_at")
 
     def __init__(self, raw: dict, now: float):
         self.role = raw["role"]
         self.position = tuple(raw["pos"])
         self.angle = raw.get("angle")
+        self.rt = raw.get("rt")  # caminhos do vizinho até os outros nós do Core (SwCore do professor)
         self.heard_at = now
 
     def predicted(self, t: float) -> sc.Position:
@@ -80,6 +81,17 @@ class SwarmNode(IProtocol):
         # Core
         self.tethered: Dict[int, int] = {}  # satélite → seq do handshake
 
+        # Todo envio (inclusive o de código que chama o provider direto) passa por aqui:
+        # durante a falha, nada sai.
+        send = self.provider.send_communication_command
+
+        def send_unless_down(command) -> None:
+            if not self.radio_down:
+                send(command)
+                self._on_transmit(command)
+
+        self.provider.send_communication_command = send_unless_down
+
         if self.role == "satellite":
             self.flight = "espera"
             self.provider.send_mobility_command(SetSpeedMobilityCommand(SATELLITE_SPEED))
@@ -109,6 +121,19 @@ class SwarmNode(IProtocol):
 
     def _on_hub(self, hub: Optional[int]) -> None:
         """(Satélite) O hub mudou (None = desconectado do Core)."""
+
+    def _on_transmit(self, command) -> None:
+        """Um pacote saiu pelo rádio."""
+
+    def beacon_extra(self) -> dict:
+        """Campos extras no beacon do Core."""
+        return {}
+
+    def on_neighbors_changed(self) -> None:
+        """(Core) Chegou o beacon de um vizinho do Core."""
+
+    def on_comm_restored(self) -> None:
+        """(Core) Fim da falha: o rádio voltou."""
 
     # ── Log ───────────────────────────────────────────────────────────────
 
@@ -145,14 +170,16 @@ class SwarmNode(IProtocol):
         else:
             self._transmit(SendMessageCommand(message, destination))
 
-    def _link_beacon(self) -> None:
-        now = self.provider.current_time()
+    def _send_beacon(self) -> None:
         payload = {"msg_type": "link", "id": self.node_id, "role": self.role, "pos": self._position}
         if self.role == "core":
-            payload["angle"] = self._current_angle(now)
+            payload["angle"] = self._current_angle(self.provider.current_time())
+            payload.update(self.beacon_extra())
         self._send_raw(payload)
 
-        if self.role == "core":
+    def _link_beacon(self) -> None:
+        self._send_beacon()
+        if self.role == "core" and not self.radio_down:  # em falha, o aviso de perda não sairia
             for endpoint, seq in list(self.tethered.items()):
                 if not self._alive(endpoint):  # sumiu sem se despedir
                     del self.tethered[endpoint]
@@ -196,6 +223,8 @@ class SwarmNode(IProtocol):
             self._links[sender] = Neighbor(raw, now)
             if fresh:
                 self._on_contact(sender)
+            if self.role == "core" and raw["role"] == "core":
+                self.on_neighbors_changed()
         elif kind == "link_req" and self.role == "core":
             self._links[sender] = Neighbor(raw, now)  # o pedido também prova que o ouvi
             self.tethered[sender] = raw["seq"]
@@ -307,6 +336,7 @@ class SwarmNode(IProtocol):
             self.provider.schedule_timer("failure", now + FAILURE_PERIOD)
         elif timer == "failure_end":
             self._log("Fim da falha: rádio de volta")
+            self.on_comm_restored()
         elif timer == "undock":
             if self.flight == "contato" and now >= self._contact_end:
                 self._undock()

@@ -50,6 +50,8 @@ class RoutingMetrics:
     # SwCore, para o tempo de recuperação após falha: (instante, receptor, remetente)
     syncs: List[Tuple[float, int, int]] = field(default_factory=list)  # SYNC aplicado
     acks: List[Tuple[float, int, int]] = field(default_factory=list)   # HOP_ACK que confirmou um dado
+    # SwCore do professor: (nó, instante, relays de que as rotas do nó dependem)
+    rt_snapshots: List[Tuple[int, float, frozenset]] = field(default_factory=list)
 
     def reset(self) -> None:
         self.__init__()
@@ -125,3 +127,8 @@ class RoutingMetrics:
 
 
 METRICS = RoutingMetrics()
+
+
+def record_rt_snapshot(node: int, time: float, uses: frozenset) -> None:
+    """Chamado pelo SwCore do professor quando mudam os relays usados pelas rotas de um nó."""
+    METRICS.rt_snapshots.append((node, time, uses))
