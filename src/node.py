@@ -40,6 +40,7 @@ from src import config, eventlog, scenario as sc
 CORE_STEP = 0.2               # s entre comandos de mobilidade do Core
 SATELLITE_STEP = 0.2          # s entre decisões de mobilidade do satélite
 ARRIVED = 0.5                 # m: considera que chegou ao ponto
+RESTORE_MARGIN = 0.05         # s além de um ciclo de beacons até avisar que o rádio voltou
 
 
 class Neighbor:
@@ -99,7 +100,8 @@ class SwarmNode(IProtocol):
         else:
             self.provider.schedule_timer("move", CORE_STEP)
             if config.CORE_FAILURE:
-                self.provider.schedule_timer("failure", FAILURE_PERIOD)
+                assert config.FAILURE_OFFSET > -FAILURE_PERIOD, "FAILURE_OFFSET deve ser > -FAILURE_PERIOD"
+                self.provider.schedule_timer("failure", config.FAILURE_OFFSET + FAILURE_PERIOD)
         self.provider.schedule_timer("link_beacon", 0.01 * self.node_id)
 
     # ── Ganchos do roteamento ─────────────────────────────────────────────
@@ -133,7 +135,7 @@ class SwarmNode(IProtocol):
         """(Core) Chegou o beacon de um vizinho do Core."""
 
     def on_comm_restored(self) -> None:
-        """(Core) Fim da falha: o rádio voltou."""
+        """(Core) O rádio voltou da falha e o nó já ouviu os vizinhos (um ciclo de beacons depois)."""
 
     # ── Log ───────────────────────────────────────────────────────────────
 
@@ -330,12 +332,23 @@ class SwarmNode(IProtocol):
             self._link_beacon()
             self.provider.schedule_timer("link_beacon", now + LINK_BEACON[self.role])
         elif timer == "failure":  # só registra; quem corta o rádio é `radio_down`
-            if self.radio_down:
+            # + 1e-9: com FAILURE_OFFSET não exato em binário, a soma de floats pode disparar o
+            # timer 1 ULP antes do início da janela (o canal em si não muda)
+            if sc.failed_core(now + 1e-9) == self.node_id:
                 self._log("Falha: incomunicável")
                 self.provider.schedule_timer("failure_end", now + FAILURE_DURATION)
             self.provider.schedule_timer("failure", now + FAILURE_PERIOD)
         elif timer == "failure_end":
             self._log("Fim da falha: rádio de volta")
+            # Avisa o roteamento só depois de um ciclo de beacons: antes disso o nó ainda não
+            # ouviu os vizinhos (todos ficaram "velhos" na falha) e não teria a quem repassar o
+            # que aprender ao pedir as tabelas (ex.: um desacoplamento ocorrido durante a falha).
+            # Só quem usa o aviso agenda o evento: um evento a mais, mesmo sem efeito, muda por
+            # arredondamento a ordem/posição dos outros e alteraria os números dos protocolos do T1.
+            # (Se um mixin comum a todos, como o de visualização, sobrescrever o gancho, rever isto.)
+            if type(self).on_comm_restored is not SwarmNode.on_comm_restored:
+                self.provider.schedule_timer("comm_restored", now + LINK_BEACON["core"] + RESTORE_MARGIN)
+        elif timer == "comm_restored":
             self.on_comm_restored()
         elif timer == "undock":
             if self.flight == "contato" and now >= self._contact_end:

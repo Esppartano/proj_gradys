@@ -11,7 +11,7 @@ O SwCore do professor é um mixin para os nós do Core e espera do nó:
 - `_on_connect` / `_on_disconnect` / `on_dock_upload`: chamados aqui a partir
   do handshake de acoplamento já existente (link_req/link_bye) e do upload do
   satélite;
-- `on_comm_restored()`: chamado pelo nó no fim da falha.
+- `on_comm_restored()`: chamado pelo nó um ciclo de beacons após o fim da falha.
 
 Do lado do satélite (sem o mixin do professor), segue o comportamento do
 SwCore original: o satélite entrega cada mensagem ao hub e a mantém até a
@@ -103,6 +103,20 @@ class ProfessorCoreAdapter(ProfessorAdapterBase):
             self._core_buffer.pop(msg["id"], None)
             name = (msg.get("payload") or {}).get("name", msg["id"])
             self._note("forwarded", f"Entregou {name} direto a {label(sat_id)}", "forwarded")
+
+    def on_comm_restored(self) -> None:
+        """Depois do pedido de tabelas do original (`SWCoreMixin.on_comm_restored`, antes na
+        MRO): reanuncia as suas linhas de satélite. Logo após a falha o nó ainda não ouviu
+        todos os vizinhos, e o que ele aprendeu ou detectou nesse intervalo foi repassado a
+        ninguém ou só a parte deles — ex.: um connect/disconnect dele mesmo (o satélite saiu
+        durante a falha e o link_bye se perdeu) ou a atualização que chegou de um lado antes
+        do beacon do outro lado. A versão é a mesma de antes: quem já a tem ignora; uma
+        rota "hop" não volta ao próximo salto, de onde veio."""
+        super().on_comm_restored()
+        for sat, row in self._rt.items():
+            state = "unreachable" if row["state"] == sw.UNREACHABLE else "reachable"
+            exclude = row["next_hop"] if row["state"] == sw.HOP else None
+            self._send_rt_update(sat, state, row["ver"], exclude=exclude)
 
     # ── Acoplamento (handshake do nó) → eventos do SwCore ─────────────────
 

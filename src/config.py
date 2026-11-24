@@ -83,6 +83,10 @@ CORE_FAILURE = True
 FAILURE_PERIOD = 30.0         # s entre o início de duas falhas (a 1ª em t = 30 s)
 FAILURE_DURATION = 1.0        # s
 FAILURE_SEED = 2026
+FAILURE_OFFSET = 0.0          # s (> -FAILURE_PERIOD): desloca o início das falhas (a 1ª em FAILURE_OFFSET + FAILURE_PERIOD).
+                              #   Com 0, as falhas (t mod 30 ∈ [0, 1)) nunca coincidem com um
+                              #   acoplamento (fases fixas, pois a volta dura 60 s); os testes de
+                              #   recuperação usam outros valores para forçar a coincidência.
 
 # ── Pub/Sub (T2, ver `pubsub.py`) ──────────────────────────────────────────
 PS_TOPICS = ["T1", "T2"]
