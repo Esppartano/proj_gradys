@@ -79,9 +79,11 @@ class SwarmVizMixin:
         if self.role == "satellite":  # só o que ainda não chegou ao hub
             handed = set().union(*getattr(self, "_peer_has", {}).values())
             pending = [i for i in getattr(self, "_buffer", ()) if i not in handed]
-            return len(self._outbox) + len(pending) + len(getattr(self, "_pending_uploads", ()))
+            return (len(self._outbox) + len(pending) + len(getattr(self, "_pending_uploads", ()))
+                    + len(getattr(self, "_ps_outbox", ())))
         return (len(getattr(self, "_buffer", ())) + len(getattr(self, "_held", ()))
-                + len(getattr(self, "_core_buffer", ())) + len(self._outbox))
+                + len(getattr(self, "_core_buffer", ())) + len(getattr(self, "_ps_pending", ()))
+                + len(self._outbox))
 
     def _color(self):
         if self.radio_down:

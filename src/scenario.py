@@ -35,33 +35,13 @@ TREE_NEIGHBORS: Dict[int, List[int]] = {n: [] for n in CORE}
 for _a, _b in TREE_EDGES:
     TREE_NEIGHBORS[_a].append(_b)
     TREE_NEIGHBORS[_b].append(_a)
-# Distância em saltos na árvore (plano compartilhado: a árvore é fixa)
-def _tree_distances(source: int) -> Dict[int, int]:
-    hops = {source: 0}
-    frontier = [source]
-    while frontier:
-        nxt = []
-        for node in frontier:
-            for peer in TREE_NEIGHBORS[node]:
-                if peer not in hops:
-                    hops[peer] = hops[node] + 1
-                    nxt.append(peer)
-        frontier = nxt
-    return hops
-
-
-TREE_DISTANCE: Dict[int, Dict[int, int]] = {n: _tree_distances(n) for n in CORE}
 
 # Pub/Sub: 3 PSPeers afastados e distribuídos ao longo do V (enunciado): o líder C1 e o
 # 3º nó de cada asa (C4, C8). PSPeers consecutivos ficam a 3 saltos, e o V se divide
 # em 3 grupos iguais, cada nó a ≤ 1 salto do seu PSPeer: C3/C5 → C4, C2/C6 → C1,
 # C7/C9 → C8.
 PSPEERS = (0, 3, 7)
-PSPEER_ANY = -1  # destino "PSPeer mais próximo do 1º nó do Core" (pedidos de satélite)
-
-
-def nearest_pspeer(core: int) -> int:
-    return min(PSPEERS, key=lambda p: (TREE_DISTANCE[core][p], p))
+PSPEER_ANY = -1  # destino "PSPeer mais próximo" (escolhido pelo 1º nó do Core, pela RT do SwCore)
 
 
 # Líder de mobilidade de cada nó (cascata pela árvore; o ápice não segue ninguém)

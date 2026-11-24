@@ -16,6 +16,7 @@ REACH = "sw_reach"         # anúncio de alcance de um endpoint (SwCore)
 UNREACH = "sw_unreach"     # anúncio de perda de alcance (SwCore)
 SYNC = "sw_sync"           # tabela inteira, ao voltar a ouvir um vizinho da árvore (SwCore)
 HOP_ACK = "sw_hop_ack"     # confirmação de recepção de um dado, salto a salto (SwCore)
+PUBSUB = "pubsub"          # Pub/Sub no Core, salto a salto pela RT do SwCore do professor (ver `pubsub.py`)
 
 CONTROL_TYPES = {SUMMARY, FLOOD_ACK, GEO_SEARCH, GEO_REPLY, REACH, UNREACH, SYNC, HOP_ACK}
 ROUTING_TYPES = {DATA, BUNDLE} | CONTROL_TYPES
@@ -38,8 +39,6 @@ class DataMessage(TypedDict, total=False):
     dest_pos: Position      # posição prevista do destino pelo plano compartilhado
     mode: str               # "greedy" (a caminho) ou "zone" (inundação na zona-alvo)
     route: List[int]        # caminho achado pela busca de rota (contorno de vazio)
-    # Pub/Sub sobre SwCore
-    ps: dict                # conteúdo de pub/sub: request, sync ou notify (ver `pubsub.py`)
 
 
 class BundleMessage(TypedDict):
