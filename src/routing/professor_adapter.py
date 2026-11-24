@@ -30,9 +30,8 @@ from src.routing import messages as m
 from src.routing import swcore_professor as sw
 from src.routing.base import RoutingMixin
 from src.routing.dock_protocol import MSG_DOCK_DATA, MSG_DOCK_DELIVER, MSG_DOCK_MSG_ACK
-from src.scenario import PSPEERS, label, region, role
-
-sw.PSPEER_IDS[:] = list(PSPEERS)
+from src import scenario
+from src.scenario import label, region, role
 
 DATA_TYPES = {sw.SWCoreMixin.routing_msg_type, MSG_DOCK_DATA, MSG_DOCK_DELIVER}
 CONTROL_TYPES = {sw.SWCoreMixin.rt_msg_type, sw.MSG_RT_REQUEST, MSG_DOCK_MSG_ACK}
@@ -78,6 +77,7 @@ class ProfessorCoreAdapter(ProfessorAdapterBase):
     def initialize(self) -> None:
         super().initialize()
         self._core_buffer: Dict[str, dict] = {}
+        sw.PSPEER_IDS[:] = list(scenario.PSPEERS)  # plano compartilhado; preenchido ao iniciar cada nó do Core
 
     # ── O que o SwCore do professor espera do nó ──────────────────────────
 

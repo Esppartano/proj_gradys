@@ -52,9 +52,11 @@ def _tree_distances(source: int) -> Dict[int, int]:
 
 TREE_DISTANCE: Dict[int, Dict[int, int]] = {n: _tree_distances(n) for n in CORE}
 
-# Pub/Sub: PSPeers no líder C1 e a 2 saltos em cada asa (C3, C7): todo nó do Core
-# fica a ≤ 2 saltos de um PSPeer.
-PSPEERS = (0, 2, 6)
+# Pub/Sub: 3 PSPeers afastados e distribuídos ao longo do V (enunciado): o líder C1 e o
+# 3º nó de cada asa (C4, C8). PSPeers consecutivos ficam a 3 saltos, e o V se divide
+# em 3 grupos iguais, cada nó a ≤ 1 salto do seu PSPeer: C3/C5 → C4, C2/C6 → C1,
+# C7/C9 → C8.
+PSPEERS = (0, 3, 7)
 PSPEER_ANY = -1  # destino "PSPeer mais próximo do 1º nó do Core" (pedidos de satélite)
 
 
