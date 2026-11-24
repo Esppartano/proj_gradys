@@ -34,7 +34,7 @@ from src import scenario
 from src.scenario import label, region, role
 
 DATA_TYPES = {sw.SWCoreMixin.routing_msg_type, MSG_DOCK_DATA, MSG_DOCK_DELIVER, m.PUBSUB}
-CONTROL_TYPES = {sw.SWCoreMixin.rt_msg_type, sw.MSG_RT_REQUEST, MSG_DOCK_MSG_ACK}
+CONTROL_TYPES = {sw.SWCoreMixin.rt_msg_type, sw.MSG_RT_REQUEST, MSG_DOCK_MSG_ACK, m.PUBSUB_SYNC}
 
 
 class RadioGate:

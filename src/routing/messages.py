@@ -17,6 +17,7 @@ UNREACH = "sw_unreach"     # anúncio de perda de alcance (SwCore)
 SYNC = "sw_sync"           # tabela inteira, ao voltar a ouvir um vizinho da árvore (SwCore)
 HOP_ACK = "sw_hop_ack"     # confirmação de recepção de um dado, salto a salto (SwCore)
 PUBSUB = "pubsub"          # Pub/Sub no Core, salto a salto pela RT do SwCore do professor (ver `pubsub.py`)
+PUBSUB_SYNC = "pubsub_sync"  # sincronização dos PSPeers: multicast (inundação) pelo Core, sem retransmissão
 
 CONTROL_TYPES = {SUMMARY, FLOOD_ACK, GEO_SEARCH, GEO_REPLY, REACH, UNREACH, SYNC, HOP_ACK}
 ROUTING_TYPES = {DATA, BUNDLE} | CONTROL_TYPES

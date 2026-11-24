@@ -28,13 +28,25 @@ que a recebeu do cliente.
 Entrega (regra do enunciado: o assinante recebe toda a fila do tópico desde a
 criação, respeitando o filtro; ao retornar e solicitar, só as não lidas)
 - Assinante do Core: o dono empurra a publicação aos assinantes que conhece ao
-  recebê-la e, ao saber de uma assinatura nova, as publicações suas que ela deve
-  receber (a fila desde a criação). Cada par (assinante, publicação) tem um só
-  remetente, o dono.
+  recebê-la. Ao assinar, o PSPeer que recebe a assinatura manda a fila desde a
+  criação (num lote, em ordem); os donos completam com o que ainda não tinha
+  chegado a ele. Cada par (assinante, publicação) tem um só remetente.
 - Satélite: ao acoplar, solicita as não lidas ao PSPeer mais próximo do hub,
   enviando as suas assinaturas e o que já leu. O PSPeer responde com as
   publicações da fila que passam no filtro e ainda não foram lidas; a resposta
   vai pelo SwCore do professor, que a guarda no Core se o satélite já saiu.
+
+Sincronização (mensagem `pubsub_sync`; enunciado: "multicast de sincronização
+contendo as mudanças aos demais nós do core, sem retransmissão; os PSPeers
+armazenam, os demais descartam"). Cada mudança que um PSPeer recebe de um cliente
+— assinatura nova ou publicação nova (as cópias são completas: tópicos e
+assinaturas) — vira um multicast ao Core. Como o rádio do Core só alcança os
+vizinhos da árvore, o multicast é uma inundação: cada nó do Core repassa cada
+sync uma única vez (TTL SWCORE_MAX_HOPS); PSPeers guardam a mudança, os demais só
+repassam e descartam. Sem retransmissão nem ACK: um sync que cruza um nó em falha
+se perde para o outro lado. Uma publicação recebida por sync não é empurrada (o
+dono já o faz); uma assinatura recebida por sync faz o dono empurrar as suas
+publicações que não foram na fila enviada pelo PSPeer do cliente (ver `_ps_on_sub`).
 
 Transporte no Core (mensagem `pubsub`): salto a salto pela RT do SwCore do
 professor (`next_hop_core`), sem ACK. Pedido de cliente vai ao PSPeer mais
@@ -55,7 +67,7 @@ from random import Random
 from statistics import mean
 from typing import Dict, List, Optional, Set, Tuple
 
-from gradysim.protocol.messages.communication import SendMessageCommand
+from gradysim.protocol.messages.communication import BroadcastMessageCommand, SendMessageCommand
 
 from src import config, scenario
 from src.config import (
@@ -268,6 +280,8 @@ class PubSubCore(PubSubClient):
         self._ps_pending: List[dict] = []      # mensagens sem rota, em ordem; tentadas de novo
         self._ps_draining = False
         self._ps_deliver_seq = 0
+        self._ps_sync_seq = 0
+        self._ps_synced: Set[str] = set()      # syncs já repassados (cada um, uma vez)
         self.provider.schedule_timer(PS_RETRY_TIMER, self.provider.current_time() + SWCORE_RETRY_INTERVAL)
 
     # ── Cliente ───────────────────────────────────────────────────────────
@@ -319,6 +333,10 @@ class PubSubCore(PubSubClient):
         return True
 
     def _on_packet(self, raw: dict) -> None:
+        if raw.get("msg_type") == m.PUBSUB_SYNC:
+            if role(raw.get("sender_id")) == "core":
+                self._ps_on_sync(raw)
+            return
         if raw.get("msg_type") != m.PUBSUB:
             super()._on_packet(raw)
             return
@@ -338,7 +356,7 @@ class PubSubCore(PubSubClient):
             if kind == "pub":
                 self._ps_on_pub(dict(body["pub"], req_hops=msg["hops"]))
             elif kind == "sub":
-                self._ps_on_sub(body["sub"])
+                self._ps_on_sub(body["sub"], from_client=True)
             elif kind == "pull":
                 self._ps_on_pull(body)
 
@@ -352,23 +370,63 @@ class PubSubCore(PubSubClient):
         for sub in self.ps_state.subs.values():
             if role(sub["subscriber"]) == "core" and eligible(sub, pub):
                 self._ps_push(sub["subscriber"], [pub])
+        self._ps_sync({"pub": pub})
 
-    def _ps_on_sub(self, sub: dict) -> None:
-        """Assinatura nova: um assinante do Core recebe a fila desde a criação
-        (as publicações de que sou dono; as outras, os seus donos mandam)."""
+    def _ps_on_sub(self, sub: dict, from_client: bool, sent: Optional[List[str]] = None) -> None:
+        """Assinatura nova. Um assinante do Core recebe a fila desde a criação, num
+        só lote e em ordem de criação, do PSPeer que recebeu a assinatura do cliente;
+        o sync leva os ids enviados (`sent`), e cada dono que souber da assinatura
+        pelo sync manda só as suas publicações que ficaram de fora (ainda não
+        tinham chegado àquele PSPeer). Cada par (assinante, publicação) tem um só
+        remetente."""
         if not self.ps_state.add_sub(sub):
             return
         PS_METRICS.record_known(sub["id"], self.node_id, self.provider.current_time())
+        backlog: List[dict] = []
         if role(sub["subscriber"]) == "core":
-            backlog = [p for p in self.ps_state.queue[sub["topic"]] if p["id"] in self._owned and eligible(sub, p)]
+            queue = self.ps_state.queue[sub["topic"]]
+            if from_client:
+                backlog = [p for p in queue if eligible(sub, p)]
+            else:
+                skip = set(sent or ())
+                backlog = [p for p in queue if p["id"] in self._owned and p["id"] not in skip and eligible(sub, p)]
             if backlog:
                 self._ps_push(sub["subscriber"], backlog)
+        if from_client:
+            self._ps_sync({"sub": sub, "sent": [p["id"] for p in backlog]})
+
+    # ── Sincronização: multicast (inundação) pelo Core, sem retransmissão ─
+
+    def _ps_sync(self, change: dict) -> None:
+        self._ps_sync_seq += 1
+        sync_id = f"y{self.node_id}_{self._ps_sync_seq}"
+        self._ps_synced.add(sync_id)
+        self._ps_broadcast_sync({"msg_type": m.PUBSUB_SYNC, "id": sync_id, "hops": 0, "change": change})
+
+    def _ps_broadcast_sync(self, msg: dict) -> None:
+        self.provider.send_communication_command(BroadcastMessageCommand(json.dumps(
+            dict(msg, hops=msg["hops"] + 1, sender_id=self.node_id))))
+
+    def _ps_on_sync(self, msg: dict) -> None:
+        if msg["id"] in self._ps_synced:
+            return  # já repassado: cada nó repassa cada sync uma vez
+        self._ps_synced.add(msg["id"])
+        # Repassa se há outro vizinho do Core além de quem me mandou (a ponta do V não devolve)
+        if msg["hops"] < SWCORE_MAX_HOPS and any(n != msg["sender_id"] for n in self.fresh_neighbors()):
+            self._ps_broadcast_sync(msg)
+        if not self.is_pspeer:
+            return  # os demais nós do Core só repassam e descartam
+        change = msg["change"]
+        if "pub" in change:
+            self.ps_state.add_pub(change["pub"])  # entra na fila; quem empurra é o dono
+        if "sub" in change:
+            self._ps_on_sub(change["sub"], from_client=False, sent=change.get("sent"))
 
     def _ps_on_pull(self, body: dict) -> None:
         """Satélite acoplado solicitou: responde com as não lidas que passam no filtro."""
         unread = []
         for sub in body["subs"]:
-            self._ps_on_sub(sub)
+            self._ps_on_sub(sub, from_client=True)
             read = set(body["read"].get(sub["topic"], ()))
             unread += [p for p in self.ps_state.queue[sub["topic"]] if p["id"] not in read and eligible(sub, p)]
         if unread:
