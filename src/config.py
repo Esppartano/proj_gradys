@@ -89,12 +89,18 @@ FAILURE_OFFSET = 0.0          # s (> -FAILURE_PERIOD): desloca o início das fal
                               #   recuperação usam outros valores para forçar a coincidência.
 
 # ── Pub/Sub (T2, ver `pubsub.py`) ──────────────────────────────────────────
+# Cenário do T2 (só na opção do Pub/Sub; o motor liga): satélites começam afastados
+# e há sensores ao longo dos eixos (ver `sensor.py`). Os protocolos do T1 rodam como antes.
+T2_SCENARIO = False
+SENSOR_OFFSETS = (8.0, 22.0, 36.0)  # m além do ponto de acoplamento, no eixo (3 sensores por eixo)
+SENSOR_LATERAL = 6.0          # m de desvio lateral do eixo, alternado (fora da trajetória do satélite)
+SENSOR_READING_INTERVAL = 5.0  # s entre leituras de um sensor
 PS_TOPICS = ["T1", "T2"]
 PS_REGIONS = ["N", "E", "S", "W", "C"]   # região de origem: eixo do satélite ou C (Core)
 PS_INTERVAL = 5.0             # s entre sorteios de assinatura/publicação de cada nó
 PS_SUBSCRIBE_PROB = 0.01      # chance, por sorteio, de assinar um tópico que o nó ainda não assina
                               #   (≈ 1 assinatura nova a cada 500 s por nó: surgem ao longo da missão)
-PS_PUBLISH_PROB = 0.2         # chance de uma publicação por sorteio (nós do Core; satélites publicam ao acoplar)
+PS_PUBLISH_PROB = 0.2         # chance de uma publicação por sorteio (nós do Core; satélites publicam ao encontrar sensores)
 PS_SEED = 2026
 
 # ── Energia (unidades arbitrárias; mobilidade é igual em todos) ───────────

@@ -14,10 +14,11 @@ Clientes (os 13 nós)
 - A cada PS_INTERVAL s, cada nó pode assinar um tópico que ainda não assina
   (T1 ou T2), com um filtro sorteado (subconjunto não vazio das regiões). Cada
   nó assina cada tópico no máximo uma vez; o filtro não muda.
-- Nós do Core publicam num tópico sorteado (PS_PUBLISH_PROB por sorteio);
-  satélites publicam a cada acoplamento.
-- Satélites só falam com o Core acoplados: publicam ao acoplar, e uma
-  assinatura feita longe do Core vai na próxima solicitação.
+- Nós do Core publicam num tópico sorteado (PS_PUBLISH_PROB por sorteio).
+- Satélites publicam ao encontrar um sensor (`sensor.py`), uma vez por sensor a cada
+  viagem (entre dois desacoplamentos): sensor par → T2, ímpar → T1 (enunciado). A publicação nasce na coleta e fica no satélite até o
+  acoplamento: só acoplados os satélites falam com o Core. Uma assinatura feita
+  longe do Core vai na próxima solicitação.
 
 PSPeers (PSPEERS, em `scenario.py`)
 -----------------------------------
@@ -81,7 +82,8 @@ from src.config import (
 )
 from src.routing import messages as m
 from src.routing.dock_protocol import MSG_DOCK_DELIVER
-from src.scenario import PSPEER_ANY, label, region, role
+from src.scenario import PSPEER_ANY, label, region, role, sensor_topic
+from src.sensor import MSG_SENSOR_DATA
 
 PS_TIMER = "ps_tick"
 PS_RETRY_TIMER = "ps_retry"
@@ -192,7 +194,9 @@ class PSPeerState:
         if pub["id"] in self.pub_ids:
             return False
         self.pub_ids.add(pub["id"])
-        insort(self.queue[pub["topic"]], pub, key=lambda p: (p["created_at"], p["id"]))
+        # desempate numérico (autor, sequência): como texto, "p9_10" viria antes de "p9_9"
+        insort(self.queue[pub["topic"]], pub,
+               key=lambda p: (p["created_at"], p["publisher"], int(p["id"].split("_")[1])))
         return True
 
     def add_sub(self, sub: dict) -> bool:
@@ -245,12 +249,15 @@ class PubSubClient:
     def _on_subscribed(self, sub: dict) -> None:
         raise NotImplementedError
 
-    def _publish(self, topic: str) -> None:
+    def _publish(self, topic: str, source: Optional[int] = None) -> None:
         pub = {"id": self._ps_id("p"), "topic": topic, "region": self.region, "publisher": self.node_id,
                "created_at": self.provider.current_time()}
+        if source is not None:
+            pub["sensor"] = source
         PS_METRICS.record_pub(pub)
-        self._note("created", f"Publicou {pub['id']} em {topic}", "created")
-        self._ps_to_pspeer({"kind": "pub", "pub": pub})
+        origin = f" (sensor {label(source)})" if source is not None else ""
+        self._note("created", f"Publicou {pub['id']} em {topic}{origin}", "created")
+        self._ps_to_pspeer({"kind": "pub", "pubs": [pub]})
 
     def _ps_deliver(self, pubs: List[dict], hops: int) -> None:
         """Chegada de publicações (push do PSPeer de casa ou resposta a uma solicitação)."""
@@ -360,7 +367,7 @@ class PubSubCore(PubSubClient):
             self._ps_deliver(body["pubs"], msg["hops"])
         elif self.is_pspeer:
             if kind == "pub":
-                self._ps_on_pub(dict(body["pub"], req_hops=msg["hops"]))
+                self._ps_on_pubs([dict(pub, req_hops=msg["hops"]) for pub in body["pubs"]])
             elif kind == "sub":
                 self._ps_on_sub(body["sub"], from_client=True)
             elif kind == "pull":
@@ -368,21 +375,25 @@ class PubSubCore(PubSubClient):
 
     # ── PSPeer ────────────────────────────────────────────────────────────
 
-    def _ps_add_pub(self, pub: dict) -> None:
-        """Publicação nova na fila (do cliente ou por sync): vai aos assinantes do Core
-        de que sou o PSPeer de casa."""
-        if not self.ps_state.add_pub(pub):
-            return
+    def _ps_add_pubs(self, pubs: List[dict]) -> List[dict]:
+        """Publicações novas na fila (do cliente ou por sync): vão aos assinantes do Core
+        de que sou o PSPeer de casa, num só pacote por (assinante, tópico). Um lote fica num pacote
+        do começo ao fim: o simulador não garante a ordem de dois pacotes enviados no
+        mesmo instante (a fila de eventos do GrADySim compara só o horário)."""
+        new = [pub for pub in pubs if self.ps_state.add_pub(pub)]
         for key in self._home:
             sub = self.ps_state.subs[key]
-            if eligible(sub, pub):
-                self._ps_push(sub["subscriber"], [pub])
+            matching = [pub for pub in new if eligible(sub, pub)]
+            if matching:
+                self._ps_push(sub["subscriber"], matching)
+        return new
 
-    def _ps_on_pub(self, pub: dict) -> None:
-        """Publicação vinda do cliente: entra na fila e vai aos demais PSPeers."""
-        if pub["id"] not in self.ps_state.pub_ids:
-            self._ps_add_pub(pub)
-            self._ps_sync({"pub": pub})
+    def _ps_on_pubs(self, pubs: List[dict]) -> None:
+        """Publicações vindas do cliente (um satélite manda as da viagem juntas): entram
+        na fila e vão aos demais PSPeers."""
+        new = self._ps_add_pubs(pubs)
+        if new:
+            self._ps_sync({"pubs": new})
 
     def _ps_on_sub(self, sub: dict, from_client: bool) -> None:
         """Assinatura nova. Vinda do cliente, sou o PSPeer de casa do assinante: um
@@ -422,9 +433,9 @@ class PubSubCore(PubSubClient):
         if not self.is_pspeer:
             return  # os demais nós do Core só repassam e descartam
         change = msg["change"]
-        if "pub" in change:  # saltos: cliente → PSPeer de origem + sync até aqui
-            pub = change["pub"]
-            self._ps_add_pub(dict(pub, req_hops=pub.get("req_hops", 0) + msg["hops"]))
+        if "pubs" in change:  # saltos: cliente → PSPeer de origem + sync até aqui
+            self._ps_add_pubs([dict(pub, req_hops=pub.get("req_hops", 0) + msg["hops"])
+                               for pub in change["pubs"]])
         if "sub" in change:
             self._ps_on_sub(change["sub"], from_client=False)
 
@@ -470,7 +481,8 @@ class PubSubSatellite(PubSubClient):
 
     def initialize(self) -> None:
         super().initialize()
-        self._ps_outbox: List[dict] = []  # pedidos à espera do acoplamento (ex.: o hub caiu antes do envio)
+        self._ps_outbox: List[dict] = []  # pedidos à espera do acoplamento (publicações da viagem)
+        self._trip_sensors: Set[int] = set()  # sensores já encontrados nesta viagem
 
     def _ps_to_pspeer(self, body: dict) -> None:
         self._ps_outbox.append(body)
@@ -487,6 +499,9 @@ class PubSubSatellite(PubSubClient):
         if not self._docked():
             return
         outbox, self._ps_outbox = self._ps_outbox, []
+        # As publicações da viagem vão num só pacote, em ordem de criação (ver `_ps_add_pubs`)
+        pubs = [pub for body in outbox if body["kind"] == "pub" for pub in body["pubs"]]
+        outbox = ([{"kind": "pub", "pubs": pubs}] if pubs else []) + [b for b in outbox if b["kind"] != "pub"]
         for body in outbox:
             self.provider.send_communication_command(SendMessageCommand(json.dumps({
                 "msg_type": m.PUBSUB, "dest": PSPEER_ANY, "hops": 1, "body": body, "sender_id": self.node_id,
@@ -503,15 +518,25 @@ class PubSubSatellite(PubSubClient):
 
     def _on_hub(self, hub) -> None:
         super()._on_hub(hub)
+        if hub is None and self.flight == "contato":  # saiu do contato: começa outra viagem
+            self._trip_sensors.clear()                  # (um link_ack atrasado que expira não conta)
         if self._docked():  # acoplou (um link_ack atrasado, já se afastando, não conta)
             self._ps_flush()
             self._ps_pull()
 
     def _on_traffic(self, destination: int, name: str) -> None:
-        """Acoplamento: publica (no lugar da mensagem ponto a ponto do T1)."""
-        self._publish(self._rng.choice(PS_TOPICS))
+        """Acoplamento: no T2 não gera a mensagem ponto a ponto do T1 (publica na coleta)."""
 
     def _on_packet(self, raw: dict) -> None:
+        if raw.get("msg_type") == MSG_SENSOR_DATA:
+            sensor = raw.get("sender_id")
+            # Um encontro por sensor por viagem (entre dois desacoplamentos): os sensores
+            # perto do ponto de acoplamento ficam ao alcance durante a espera e o contato
+            if (role(sensor) == "sensor" and sensor not in self._trip_sensors
+                    and self.provider.current_time() <= config.TRAFFIC_END):
+                self._trip_sensors.add(sensor)
+                self._publish(sensor_topic(sensor), source=sensor)
+            return
         ps = (raw.get("payload") or {}).get("ps") if raw.get("msg_type") == MSG_DOCK_DELIVER else None
         if ps is None:
             super()._on_packet(raw)

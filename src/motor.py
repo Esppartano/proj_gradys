@@ -21,7 +21,8 @@ from src.metrics import METRICS
 from src.pubsub import PS_METRICS
 from src.nodes import make_node
 from src.pacing import PacingHandler
-from src.scenario import ALL_NODES, DOCK_RADIUS, initial_position, role
+from src.scenario import ALL_NODES, DOCK_RADIUS, SENSORS, initial_position, role
+from src.sensor import make_sensor
 
 
 def run(protocol: str, viz: bool) -> Dict[str, float]:
@@ -29,10 +30,14 @@ def run(protocol: str, viz: bool) -> Dict[str, float]:
     METRICS.reset()
     PS_METRICS.reset()
     duration = VIZ_DURATION if viz else SIMULATION_DURATION
-    if duration < 2 * ROTATION_PERIOD:
-        print(f"\n[AVISO] {duration / ROTATION_PERIOD:.0f} volta(s): a última volta só entrega, então "
-              "nenhuma mensagem será criada. Use pelo menos 2 (TURNS / VIZ_TURNS em src/config.py).\n")
-    config.TRAFFIC_END = duration - ROTATION_PERIOD  # última volta: só entrega
+    config.T2_SCENARIO = protocol == "pubsub"  # satélites afastados no início + sensores
+    # Últimas voltas só entregam: 1 no T1; 2 no T2, porque a publicação de um satélite espera
+    # nele até o acoplamento (até ~36 s) e os outros satélites ainda precisam acoplar para pedi-la
+    drain_turns = 2 if config.T2_SCENARIO else 1
+    if duration <= drain_turns * ROTATION_PERIOD:
+        print(f"\n[AVISO] {duration / ROTATION_PERIOD:.0f} volta(s): as últimas {drain_turns} só entregam, então "
+              f"nenhuma mensagem será criada. Use mais de {drain_turns} (TURNS / VIZ_TURNS em src/config.py).\n")
+    config.TRAFFIC_END = duration - drain_turns * ROTATION_PERIOD
     log_path = eventlog.open_log(
         protocol, f"# Protocolo: {protocol} | modo: {'visualizador 3D' if viz else 'headless'}"
                   f" | duração: {duration:.0f}s")
@@ -46,6 +51,10 @@ def run(protocol: str, viz: bool) -> Dict[str, float]:
     classes = {r: make_node(protocol, viz, r) for r in ("core", "satellite")}
     for node_id in ALL_NODES:  # a ordem de criação define os IDs (0..8 = Core, 9..12 = satélites)
         builder.add_node(classes[role(node_id)], initial_position(node_id))
+    if config.T2_SCENARIO:
+        sensor_class = make_sensor(viz)
+        for sensor in SENSORS:  # 13..24, na sequência
+            assert builder.add_node(sensor_class, initial_position(sensor)) == sensor
 
     builder.add_handler(TimerHandler())
     builder.add_handler(MobilityHandler(MobilityConfiguration(update_rate=MOBILITY_UPDATE)))
@@ -66,6 +75,7 @@ def run(protocol: str, viz: bool) -> Dict[str, float]:
     try:
         builder.build().start_simulation()
     finally:
+        config.T2_SCENARIO = False
         summary = METRICS.summary()
         summary.update(METRICS.recovery(duration))
         if protocol == "pubsub":
@@ -138,7 +148,7 @@ def write_table_to_file(results: List[Dict[str, float]], filename):
 
 # Pub/Sub (uma execução): (métrica, chave no resumo, formato, descrição) — tabela vertical
 PS_ROWS = [
-    ("Publicações", "ps_pubs", "{}", "Publicações criadas (Core: sorteio a cada PS_INTERVAL s; satélites: uma por acoplamento)."),
+    ("Publicações", "ps_pubs", "{}", "Publicações criadas (Core: sorteio a cada PS_INTERVAL s; satélites: uma por sensor encontrado em cada viagem)."),
     ("Assinaturas", "ps_subs", "{}", "Assinaturas criadas; uma nova do mesmo tópico substitui o filtro anterior do nó."),
     ("Entregas esperadas", "ps_expected", "{}", "Pares (assinante, publicação) que a regra de entrega exige: filtro vigente na criação da publicação contém a região dela; nunca ao próprio autor."),
     ("Entregues", "ps_delivered", "{}", "Entregas esperadas que chegaram ao assinante."),

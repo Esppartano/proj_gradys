@@ -94,7 +94,7 @@ class SwarmNode(IProtocol):
         self.provider.send_communication_command = send_unless_down
 
         if self.role == "satellite":
-            self.flight = "espera"
+            self.flight = "voltando" if config.T2_SCENARIO else "espera"  # T2: começa afastado
             self.provider.send_mobility_command(SetSpeedMobilityCommand(SATELLITE_SPEED))
             self.provider.schedule_timer("move", SATELLITE_STEP)
         else:

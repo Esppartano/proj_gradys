@@ -27,6 +27,9 @@ CORE = list(range(0, 9))
 SATELLITES = list(range(9, 13))
 ENDPOINTS = SATELLITES
 ALL_NODES = CORE + SATELLITES
+# Sensores (cenário do T2): 3 por eixo, ids consecutivos em cada eixo (há par e ímpar em todos)
+SENSORS = list(range(len(ALL_NODES), len(ALL_NODES) + 3 * len(SATELLITES)))  # criados depois dos demais
+SENSOR_SAT = {s: SATELLITES[(s - SENSORS[0]) // 3] for s in SENSORS}  # sensor → satélite do eixo
 APEX = 0
 
 # Árvore geradora do Core (já criada): as arestas do V
@@ -51,18 +54,25 @@ FORMATION_PARENT = {1: 0, 2: 1, 3: 2, 4: 3, 5: 0, 6: 5, 7: 6, 8: 7}
 def label(node_id: int) -> str:
     if node_id in CORE:
         return f"C{node_id + 1}"
+    if node_id in SENSORS:
+        return f"X{node_id}"
     return f"S{node_id - 8}"
 
 
 def role(node_id: int) -> str:
-    return "core" if node_id in CORE else "satellite"
+    if node_id in CORE:
+        return "core"
+    if node_id in SENSORS:
+        return "sensor"
+    return "satellite" if node_id in SATELLITES else "desconhecido"
 
 
 def region(node_id: int) -> str:
     """Região de origem no Pub/Sub: eixo do satélite (N/E/S/W) ou C (Core)."""
     if node_id in CORE:
         return "C"
-    return {0: "E", 90: "N", 180: "W", 270: "S"}[SATELLITE_AXES[node_id]]
+    sat = SENSOR_SAT.get(node_id, node_id)  # sensor: o eixo do seu satélite
+    return {0: "E", 90: "N", 180: "W", 270: "S"}[SATELLITE_AXES[sat]]
 
 
 SAT_BY_REGION: Dict[str, int] = {region(s): s for s in SATELLITES}  # eixo → satélite
@@ -164,7 +174,25 @@ def planned_position(node_id: int) -> Position:
     return satellite_dock(node_id)
 
 
+def sensor_position(sensor: int) -> Position:
+    """No eixo do seu satélite, além do ponto de acoplamento, com desvio lateral alternado."""
+    i = (sensor - SENSORS[0]) % 3
+    angle = radians(SATELLITE_AXES[SENSOR_SAT[sensor]])
+    radius = DOCK_RADIUS + config.SENSOR_OFFSETS[i]
+    side = config.SENSOR_LATERAL * (1 if i % 2 == 0 else -1)
+    return (CENTER[0] + radius * cos(angle) - side * sin(angle),
+            CENTER[1] + radius * sin(angle) + side * cos(angle), 0.0)
+
+
+def sensor_topic(sensor: int) -> str:
+    """Enunciado: sensor par → T2; ímpar → T1."""
+    return "T2" if sensor % 2 == 0 else "T1"
+
+
 def initial_position(node_id: int) -> Position:
     if node_id in CORE:
         return slot_position(node_id, 0.0)
-    return satellite_dock(node_id)
+    if node_id in SENSORS:
+        return sensor_position(node_id)
+    # T2: o satélite começa afastado e se aproxima em linha reta; T1: espera no ponto de acoplamento
+    return satellite_away(node_id) if config.T2_SCENARIO else satellite_dock(node_id)
