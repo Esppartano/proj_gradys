@@ -5,8 +5,9 @@ Trabalhos da disciplina INF2541 (PUC-Rio), num enxame de drones simulado no
 
 - **T1:** compara quatro protocolos de roteamento ([RELATORIO.md](RELATORIO.md));
 - **T2:** Pub/Sub distribuído, por tópicos com filtro de região de origem,
-  sobre o SwCore, com falha periódica de um nó do Core
-  ([RELATORIO_T2.md](RELATORIO_T2.md)).
+  sobre o SwCore fornecido pelo professor (repositório
+  [routing-ricardo](https://github.com/INF2541-Intro-Mobile-Ubiquous-Computing/routing-ricardo)),
+  com falha periódica de um nó do Core ([RELATORIO_T2.md](RELATORIO_T2.md)).
 
 Protocolos do T1:
 
@@ -22,16 +23,19 @@ torno do próprio centro (uma volta por minuto), e 4 satélites nos eixos leste,
 norte, oeste e sul, que esperam no ponto de acoplamento, acoplam quando uma das
 pontas do V passa, trocam mensagens, se afastam pelo próprio eixo e retornam.
 Rádio de 30 m.
-Todos os protocolos rodam com a mesma mobilidade e o mesmo tráfego.
+Os protocolos do T1 rodam com a mesma mobilidade e o mesmo tráfego.
 
 Regra do T2, ligada por padrão e válida para todos os protocolos: a cada 30 s,
 um nó do Core sorteado fica incomunicável por 1 s (`CORE_FAILURE` em
 `src/config.py`). Os resultados do [RELATORIO.md](RELATORIO.md) são da versão
 do T1 (branch `T1`), sem essa regra.
 
-No T2, os 13 nós assinam e publicam em tópicos; três nós do Core (C1, C3 e
-C7) são PSPeers, guardam o estado replicado e enviam as notificações pelo
-SwCore.
+No T2 (opção 6), os satélites começam afastados e publicam ao encontrar
+sensores (par → tópico T2, ímpar → T1); o Core publica ao acaso; todos assinam
+T1/T2 com filtro de região. Três nós do Core (C1, C4 e C8) são PSPeers: guardam
+a fila de cada tópico e as assinaturas, sincronizam-se por multicast e entregam
+pelo SwCore do professor. O cenário do T2 (satélites afastados e sensores) só
+vale na opção 6.
 
 Detalhes do cenário, das decisões de projeto, dos resultados e das
 referências: **[RELATORIO.md](RELATORIO.md)** (T1) e
@@ -62,7 +66,8 @@ python main.py              # menu interativo
 python main.py 5            # benchmark dos 4 protocolos, modo rápido (sem browser, ≈ 1 min)
 python main.py 4 1          # SwCore no visualizador 3D (abre o browser; 30× mais rápido)
 python main.py 3 2          # DTN em modo rápido
-python main.py 6 2          # Pub/Sub sobre SwCore (T2) em modo rápido
+python main.py 6 2          # Pub/Sub (T2) em modo rápido (≈ 4 min)
+python -m unittest tests.test_pubsub -v   # testes funcionais TF01–TF06 do T2 (≈ 10 s)
 ```
 
 Formato dos atalhos: `python main.py <opção> [modo]`
@@ -74,24 +79,25 @@ Formato dos atalhos: `python main.py <opção> [modo]`
 | 3 | DTN |
 | 4 | SwCore |
 | 5 | Benchmark (todos) |
-| 6 | Pub/Sub sobre SwCore (T2) |
+| 6 | Pub/Sub sobre o SwCore do professor (T2) |
 
 Modo: `1` = visualizador 3D (padrão) · `2` = rápido, sem browser.
 
 Os dois modos simulam 60 voltas (60 min simulados). O modo rápido gera os
-resultados em ≈ 1 min; o visualizador 3D acelera o tempo 30× (os 60 min passam
+resultados em ≈ 1 min por protocolo do T1 (≈ 4 min no Pub/Sub); o visualizador 3D acelera o tempo 30× (os 60 min passam
 em 2 min na tela; uma volta, em 2 s). Para ver os acoplamentos com calma, baixe
 o `VIZ_SPEEDUP` (ex.: 5). Para encerrar antes, use Ctrl+C. As durações ficam em `src/config.py`
-(`TURNS`, `VIZ_TURNS` e `VIZ_SPEEDUP`); a última volta só entrega as pendentes, então são
-necessárias pelo menos 2 voltas.
+(`TURNS`, `VIZ_TURNS` e `VIZ_SPEEDUP`). A última volta só entrega as pendentes (no T2, as
+duas últimas, porque a publicação do satélite espera nele até acoplar), então são
+necessárias pelo menos 2 voltas (3 no T2).
 
 ## Saídas
 
 - **`results.md`**: tabela comparativa com a legenda de cada coluna. É gerada
   pelo benchmark (opção 5).
-- **`results_pubsub.md`**: métricas do Pub/Sub (MDR, falsos positivos e
-  negativos, latência, recuperação após falha…) com a descrição de cada uma.
-  É gerada pela opção 6 no modo rápido.
+- **`results_pubsub.md`**: métricas do Pub/Sub (MDR, fora de ordem, latência
+  p95/p99, recuperação após falha…) com a descrição de cada uma. É gerada pela
+  opção 6 no modo rápido.
 - **`logs/<protocolo>.log`**: eventos de cada execução (criação, repasse,
   entrega, conexão dos satélites…), um por linha. Fica fora do git.
 
@@ -108,9 +114,10 @@ necessárias pelo menos 2 voltas.
 | Cinza-grafite | Podou a retransmissão: todos os vizinhos já ouviram (Flooding) ou fora da zona-alvo (GeoCast) |
 | Verde-claro / vermelho-claro | Anunciou alcance / perda de alcance de um satélite (SwCore) |
 | Vermelho-escuro | Nó do Core em falha (incomunicável por 1 s) |
+| Azul / verde-oliva | Sensor par (publica em T2) / ímpar (publica em T1) — só no T2 |
 
 O painel **Panel** (canto inferior direito) mostra o estado de cada nó. O
-número é o ID: 0–8 = C1–C9, 9–12 = S1–S4.
+número é o ID: 0–8 = C1–C9, 9–12 = S1–S4, 13–24 = sensores (T2).
 
 ## Estrutura
 
@@ -122,6 +129,9 @@ número é o ID: 0–8 = C1–C9, 9–12 = S1–S4.
 | `src/node.py`, `src/nodes.py` | Camada comum (beacons, formação em cascata, handshake e ciclo dos satélites) e a montagem do nó de cada protocolo |
 | `src/pacing.py` | Ritmo acelerado do modo 3D |
 | `src/routing/` | Um mixin por protocolo, mais a base comum e os formatos de mensagem |
-| `src/pubsub.py` | Pub/Sub do T2: clientes, PSPeers, regra de entrega e métricas |
+| `src/pubsub.py` | Pub/Sub do T2: clientes, PSPeers, sincronização e métricas |
+| `src/routing/swcore_professor.py`, `src/routing/professor_adapter.py` | SwCore fornecido pelo professor (cópia do routing-ricardo) e a integração ao nó |
+| `src/sensor.py` | Sensores do T2 (par/ímpar) |
+| `tests/test_pubsub.py` | Testes funcionais TF01–TF06 do T2 |
 | `src/metrics.py`, `src/motor.py` | Métricas, execução da simulação e tabela |
 | `src/viz.py`, `src/eventlog.py` | Visualização 3D e log em arquivo |

@@ -1,30 +1,31 @@
-# Resultados do Pub/Sub sobre SwCore
+# Resultados do Pub/Sub sobre o SwCore do professor
 
 | Métrica | Valor | Descrição |
 | :--- | :---: | :--- |
-| Publicações | 1721 | Publicações criadas (Core: sorteio a cada PS_INTERVAL s; satélites: uma por acoplamento). |
-| Assinaturas | 459 | Assinaturas criadas; uma nova do mesmo tópico substitui o filtro anterior do nó. |
-| Entregas esperadas | 11471 | Pares (assinante, publicação) que a regra de entrega exige: filtro vigente na criação da publicação contém a região dela; nunca ao próprio autor. |
-| Entregues | 11471 | Entregas esperadas que chegaram ao assinante. |
-| MDR (%) | 100.0 | Taxa de entrega: entregues / esperadas × 100. |
-| Falsos positivos | 89 | Entregas que a regra não exigia (o PSPeer ainda não conhecia o filtro novo do assinante). |
-| Falsos negativos | 0 | Entregas esperadas que não chegaram até o fim da simulação. |
-| Duplicadas | 0 | Cópias extras da mesma publicação no mesmo assinante. |
-| Fora de ordem | 359 | Entregas esperadas que chegaram depois de uma publicação mais nova do mesmo autor, para o mesmo assinante. |
-| Fora de ordem (%) | 3.13 | Fora de ordem / entregas esperadas × 100 (sem falsos positivos). |
-| Latência média (s) | 4.40 | Da criação da publicação à entrega (só entregas esperadas). |
-| Latência p95 (s) | 23.87 | Percentil 95 da latência. |
-| Latência p99 (s) | 32.14 | Percentil 99 da latência. |
-| Saltos médios | 4.90 | Transmissões de rádio do autor ao PSPeer e do PSPeer ao assinante. |
-| Convergência de assinatura (s) | 4.109 | Da criação da assinatura até todos os PSPeers a conhecerem (média). |
-| Vazão (entregas/min) | 191.2 | Entregas esperadas por minuto simulado. |
-| Falhas de core | 119 | Janelas em que um nó do Core ficou incomunicável (1 s a cada 30 s). |
-| Recuperação do roteamento (s) | 0.087 | Do fim da falha até o core e todos os vizinhos da árvore trocarem SYNC (média). |
-| Recuperação do roteamento, máx. (s) | 0.220 | Pior caso da linha anterior. |
-| Recuperação dos dados (s) | 0.920 | Do fim da falha até o 1º dado confirmado (HOP_ACK) enviado pelo core ou a ele (média; depende do tráfego). |
-| Recuperação dos dados, máx. (s) | 10.250 | Pior caso da linha anterior. |
-| Retransmissões por salto | 407 | Dados reenviados por falta de HOP_ACK (ex.: próximo salto em falha). |
-| Tx dados | 55388 | Pacotes de dados transmitidos (pedidos, syncs e notificações). |
-| Tx controle | 63166 | Pacotes de controle: REACH/UNREACH, SYNC e HOP_ACK. |
-| Energia | 177636 | 1 por transmissão + 0,5 por recepção (unidades arbitrárias). |
-| Energia por entrega | 15.49 | Energia / entregas esperadas. |
+| MDR (%) | 97.67 | Publicações que chegaram a TODOS os assinantes elegíveis / publicações com ao menos um elegível × 100. |
+| Fora de ordem (%) | 0.12 | Entregas que chegaram depois de uma publicação mais nova do mesmo autor, no mesmo tópico, para o mesmo assinante / entregues × 100. |
+| Latência média (s) | 19.10 | Da publicação à entrega, só publicações posteriores à assinatura (ao vivo). Inclui o tempo que a publicação de um satélite espera nele até acoplar e o que a entrega a um satélite espera até ele acoplar. |
+| Latência p95 (s) | 41.15 | Percentil 95 da latência ao vivo. |
+| Latência p99 (s) | 61.95 | Percentil 99 da latência ao vivo. |
+| Recuperação após falha, média (s) | 0.19 | Entre as falhas recuperadas: do fim da falha até todo o Core ter de novo rota aos outros 8 nós, o PSPeer mais próximo de antes e as linhas de satélite iguais ao estado real (amostras a cada 0,1 s). |
+| Recuperação após falha, máx. (s) | 0.30 | Pior caso da linha anterior. |
+| Falhas recuperadas | 119 | Falhas recuperadas em até 10 s (de `Falhas de core`). |
+| Falhas de core | 119 | Janelas em que um nó do Core ficou incomunicável (1 s a cada 30 s) e cuja medição coube na simulação (terminou até 10 s antes do fim ou recuperou antes). |
+| Publicações | 2616 | Publicações criadas: Core (sorteio a cada PS_INTERVAL s) e satélites (uma por sensor encontrado em cada viagem). |
+| Publicações de satélites | 1398 | Das publicações, as de satélites (sensor par → T2, ímpar → T1). |
+| Publicações com assinante elegível | 2616 | Base do MDR: publicações com ao menos um assinante cujo filtro contém a região delas. |
+| Assinaturas | 26 | Assinaturas criadas (cada nó assina cada tópico no máximo uma vez). |
+| Entregas esperadas | 22241 | Pares (assinante, publicação): o assinante assina o tópico com filtro que contém a região da publicação (inclusive a fila anterior à assinatura); nunca ao próprio autor. |
+| Entregues | 22059 | Entregas esperadas que chegaram. |
+| Taxa por par (%) | 99.18 | Entregues / esperadas × 100. |
+| Falsos positivos | 0 | Entregas que a regra não exigia (filtro ou tópico errado). |
+| Duplicadas | 0 | Cópias extras da mesma publicação no mesmo assinante (descartadas por ele). |
+| Entregas ao vivo | 17377 | Entregas de publicações posteriores à assinatura (base da latência). |
+| Entregas da fila antiga | 4682 | Entregas de publicações anteriores à assinatura. |
+| Latência da fila antiga (s) | 6.88 | Da assinatura à entrega, para a fila antiga (média). |
+| Saltos médios | 5.35 | Transmissões de rádio do autor ao PSPeer, entre PSPeers (sync) e do PSPeer ao assinante. |
+| Convergência de assinatura (s) | 5.278 | Da criação da assinatura até os 3 PSPeers a conhecerem (média). Inclui o tempo até o satélite acoplar. |
+| Assinaturas não sincronizadas | 0 | Assinaturas que algum PSPeer nunca conheceu (sync perdido numa falha; sem retransmissão). |
+| Vazão (entregas/min) | 367.6 | Entregues por minuto simulado. |
+| Tx dados | 9811 | Pacotes de dados: pedidos ao PSPeer, entregas aos assinantes e dados do SwCore até os satélites. |
+| Tx controle | 21190 | Pacotes de controle: atualizações e pedidos da RT de satélites do SwCore, confirmações de upload e syncs entre PSPeers. Beacons de enlace (inclusive os que levam a RT do Core) ficam de fora, como no T1. |

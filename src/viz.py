@@ -13,7 +13,7 @@ from src.scenario import APEX, FORMATION_PARENT, label
 REPAINT_INTERVAL = VIZ_SPEEDUP  # s simulados: ≈ 1 repintura por segundo na tela
 
 PROTOCOL_NAMES = {"flooding": "Flooding", "geocast": "GeoCast", "dtn": "DTN", "swcore": "SwCore",
-                  "pubsub": "Pub/Sub sobre SwCore", "swcore_prof": "SwCore do professor"}
+                  "pubsub": "Pub/Sub sobre o SwCore do professor", "swcore_prof": "SwCore do professor"}
 
 # Cores por papel (RGB 0-255)
 COLOR_APEX = (160, 32, 240)        # roxo: líder de mobilidade C1

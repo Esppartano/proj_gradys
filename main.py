@@ -25,7 +25,7 @@ SCENARIOS = {
     "4": ("SwCore (árvore do Swarm Core + tabela de alcance)", "swcore"),
 }
 BENCHMARK = "5"
-PUBSUB = {"6": ("Pub/Sub sobre SwCore (T2)", "pubsub")}
+PUBSUB = {"6": ("Pub/Sub sobre o SwCore do professor (T2)", "pubsub")}
 RESULTS_FILE = Path(__file__).resolve().parent / "results.md"  # sempre na raiz do projeto
 PUBSUB_RESULTS_FILE = RESULTS_FILE.with_name("results_pubsub.md")
 USAGE = "Uso: python main.py <opcao: 1-6> [modo: 1-2]"

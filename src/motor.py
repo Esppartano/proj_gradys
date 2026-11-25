@@ -189,4 +189,4 @@ def print_pubsub(summary: Dict[str, float]) -> None:
 
 def write_pubsub_to_file(summary: Dict[str, float], filename) -> None:
     with open(filename, "w", encoding="utf-8") as f:
-        f.write("# Resultados do Pub/Sub sobre SwCore\n\n" + _ps_table(summary) + "\n")
+        f.write("# Resultados do Pub/Sub sobre o SwCore do professor\n\n" + _ps_table(summary) + "\n")
