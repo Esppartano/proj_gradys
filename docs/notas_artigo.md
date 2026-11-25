@@ -3,7 +3,7 @@
 **Tema escolhido:** *D — Global Path Planning and energy management strategies for
 swarm of UAVs*.
 
-**Status:** passo 1 de 4 (levantamento das fontes sugeridas), 25/11/2026. Este
+**Status:** passo 1 de 4 feito (levantamento das fontes); lista enviada ao professor em 25/11/2026, aguardando retorno. Este
 trabalho é separado do T2: o relatório do T2 não cita o artigo.
 
 | Passo | Conteúdo | Status |
@@ -15,6 +15,40 @@ trabalho é separado do T2: o relatório do T2 não cita o artigo.
 
 Legenda de leitura: **lido** = texto completo lido; **localizado** = só título,
 resumo ou trechos de busca. Números só aparecem aqui quando vêm do texto lido.
+
+---
+
+## Lista enviada ao professor (25/11/2026), aguardando retorno
+
+Autores conferidos na API do arXiv, no NCBI E-utilities e, para o item 6, nos
+metadados do PDF e no repositório da BIU. Coluna "Pasta": ✔ = PDF em
+`docs/referencias/leitmotiv/` (fora do git).
+
+| # | Grupo | Referência | Pasta |
+|---|---|---|---|
+| 1 | A: indicada no texto | Qi, Y.; Jiang, H.; Huang, G.; Yang, L.; Wang, F.; Xu, Y. "Multi-UAV path planning considering multiple energy consumptions via an improved bee foraging learning particle swarm optimization algorithm". *Scientific Reports* 15, 14755 (2025). [PMC12037825](https://pmc.ncbi.nlm.nih.gov/articles/PMC12037825/) | ✔ |
+| 2 | B: MARL (MAHPPO-AM) | Sun, T.; Guo, N.; Gu, H.; Peng, Y.; Feng, Z. "Integrated Communication and Control for Energy-Efficient UAV Swarms: A Multi-Agent Reinforcement Learning Approach". [arXiv:2509.23905](https://arxiv.org/pdf/2509.23905) (2025) | ✔ |
+| 3 | B: MARL (DDPG, ator-crítico) | Alam, M. M.; Aarafat, M. Y.; Hossain, T. "Variations in Multi-Agent Actor-Critic Frameworks for Joint Optimizations in UAV Swarm Networks: Recent Evolution, Challenges, and Directions". [arXiv:2410.06627](https://arxiv.org/pdf/2410.06627) (2024) | ✔ |
+| 4 | B: enxame / trajetória | Arshid, K.; Krayani, A.; Marcenaro, L.; Gomez, D. M.; Regazzoni, C. "Toward Autonomous UAV Swarm Navigation: A Review of Trajectory Design Paradigms". *Sensors* 25(18) (2025). DOI 10.3390/s25185877. [PMC12473296](https://pmc.ncbi.nlm.nih.gov/articles/PMC12473296/) | ✔ |
+| 5 | B: rodízio e recarga | Arribas, E.; Cholvi, V.; Mancuso, V. "Optimizing UAV Recharge Scheduling for Heterogeneous and Persistent Aerial Service". [arXiv:2205.12656](https://arxiv.org/pdf/2205.12656) (2022) | ✔ |
+| 6 | B: drones reserva | Hartuv, E.; Kraus, S.; Agmon, N. "Spare Drone Optimization for Persistent Task Performance with Multiple Homes". ICUAS 2020, pp. 389–397. [PDF](https://u.cs.biu.ac.il/~agmon/HartuvICUAS20.pdf) (ordem dos autores: conferir na 1ª página) | ✔ |
+| 7 | B: troca de bateria | Bouček, Z.; Flídr, M.; Straka, O. "Mission Planner for UAV Battery Replacement". [arXiv:2407.01084](https://arxiv.org/pdf/2407.01084) (2024) | ✔ |
+| 8 | C: modelo de energia | Beigi, P.; Rajabi, M. S.; Aghakhani, S. "An Overview of Drone Energy Consumption Factors and Models". [arXiv:2206.10775](https://arxiv.org/pdf/2206.10775) (2022) | ✔ |
+| 9 | C: modelo de energia | Muli, C.; Park, S.; Liu, M. "A Comparative Study on Energy Consumption Models for Drones". [arXiv:2206.01609](https://arxiv.org/pdf/2206.01609) (2022) | ✔ |
+| 10 | D: paga | Chen, X.; Tianfield, H.; Du, W. "Bee-foraging learning particle swarm optimization". *Applied Soft Computing* 102 (2021). [DOI](https://doi.org/10.1016/j.asoc.2021.107134) | — |
+| 11 | D: paga | Kamra, N.; Kumar, T. K. S.; Ayanian, N. "Combinatorial Problems in Multirobot Battery Exchange Systems". *IEEE T-ASE* 15(2), 852–862 (2018). [DOI](https://doi.org/10.1109/TASE.2017.2767379) | — |
+| 12 | D: paga | Li, H.; Zhan, Z.; Wang, Z. "Energy-consumption model for rotary-wing drones". *J. Field Robotics* 41, 1940–1959 (2024). [DOI](https://doi.org/10.1002/rob.22359) | — |
+
+Grupos:
+- **A:** indicada no texto do tema.
+- **B:** escolhidas por nós para cobrir as abordagens que o texto cita sem dar
+  referência.
+- **C:** acrescentadas para o modelo de energia.
+- **D:** pagas; perguntamos ao professor se são necessárias. Na rede da PUC
+  devem abrir.
+
+**Leitura até agora:** só 1 e 2 foram lidas por inteiro, nas seções abaixo. As
+demais foram localizadas.
 
 ---
 
