@@ -80,8 +80,6 @@ def run(protocol: str, viz: bool) -> Dict[str, float]:
         summary.update(METRICS.recovery(duration))
         if protocol == "pubsub":
             summary.update(PS_METRICS.summary(duration))
-            delivered = summary["ps_delivered"]
-            summary["ps_energy_per_delivery"] = summary["energy"] / delivered if delivered else float("nan")
         eventlog.close_log(_ps_table(summary) if protocol == "pubsub"
                           else _table([{"protocol": protocol, **summary}]))
     print(f"\n>>> Log de eventos salvo em: {log_path}\n")
@@ -146,34 +144,36 @@ def write_table_to_file(results: List[Dict[str, float]], filename):
         f.write("# Resultados\n\n" + _table(results) + "\n\n" + _legend() + "\n")
 
 
-# Pub/Sub (uma execução): (métrica, chave no resumo, formato, descrição) — tabela vertical
+# Pub/Sub (uma execução): (métrica, chave no resumo, formato, descrição) — tabela vertical.
+# As 4 métricas do enunciado vêm primeiro; definições em `pubsub.py` (Métricas de pub/sub).
 PS_ROWS = [
-    ("Publicações", "ps_pubs", "{}", "Publicações criadas (Core: sorteio a cada PS_INTERVAL s; satélites: uma por sensor encontrado em cada viagem)."),
-    ("Assinaturas", "ps_subs", "{}", "Assinaturas criadas; uma nova do mesmo tópico substitui o filtro anterior do nó."),
-    ("Entregas esperadas", "ps_expected", "{}", "Pares (assinante, publicação) que a regra de entrega exige: filtro vigente na criação da publicação contém a região dela; nunca ao próprio autor."),
-    ("Entregues", "ps_delivered", "{}", "Entregas esperadas que chegaram ao assinante."),
-    ("MDR (%)", "ps_mdr", "{:.1f}", "Taxa de entrega: entregues / esperadas × 100."),
-    ("Falsos positivos", "ps_false_pos", "{}", "Entregas que a regra não exigia (o PSPeer ainda não conhecia o filtro novo do assinante)."),
-    ("Falsos negativos", "ps_false_neg", "{}", "Entregas esperadas que não chegaram até o fim da simulação."),
-    ("Duplicadas", "ps_duplicates", "{}", "Cópias extras da mesma publicação no mesmo assinante."),
-    ("Fora de ordem", "ps_out_of_order", "{}", "Entregas esperadas que chegaram depois de uma publicação mais nova do mesmo autor, para o mesmo assinante."),
-    ("Fora de ordem (%)", "ps_out_of_order_pct", "{:.2f}", "Fora de ordem / entregas esperadas × 100 (sem falsos positivos)."),
-    ("Latência média (s)", "ps_lat_mean", "{:.2f}", "Da criação da publicação à entrega (só entregas esperadas)."),
-    ("Latência p95 (s)", "ps_lat_p95", "{:.2f}", "Percentil 95 da latência."),
-    ("Latência p99 (s)", "ps_lat_p99", "{:.2f}", "Percentil 99 da latência."),
-    ("Saltos médios", "ps_hops_mean", "{:.2f}", "Transmissões de rádio do autor ao PSPeer e do PSPeer ao assinante."),
-    ("Convergência de assinatura (s)", "ps_sub_conv_mean", "{:.3f}", "Da criação da assinatura até todos os PSPeers a conhecerem (média)."),
-    ("Vazão (entregas/min)", "ps_throughput", "{:.1f}", "Entregas esperadas por minuto simulado."),
-    ("Falhas de core", "failures", "{}", "Janelas em que um nó do Core ficou incomunicável (1 s a cada 30 s)."),
-    ("Recuperação do roteamento (s)", "rec_routing_mean", "{:.3f}", "Do fim da falha até o core e todos os vizinhos da árvore trocarem SYNC (média)."),
-    ("Recuperação do roteamento, máx. (s)", "rec_routing_max", "{:.3f}", "Pior caso da linha anterior."),
-    ("Recuperação dos dados (s)", "rec_data_mean", "{:.3f}", "Do fim da falha até o 1º dado confirmado (HOP_ACK) enviado pelo core ou a ele (média; depende do tráfego)."),
-    ("Recuperação dos dados, máx. (s)", "rec_data_max", "{:.3f}", "Pior caso da linha anterior."),
-    ("Retransmissões por salto", "hop_retx", "{}", "Dados reenviados por falta de HOP_ACK (ex.: próximo salto em falha)."),
-    ("Tx dados", "data_tx", "{}", "Pacotes de dados transmitidos (pedidos, syncs e notificações)."),
-    ("Tx controle", "control_tx", "{}", "Pacotes de controle: REACH/UNREACH, SYNC e HOP_ACK."),
-    ("Energia", "energy", "{:.0f}", "1 por transmissão + 0,5 por recepção (unidades arbitrárias)."),
-    ("Energia por entrega", "ps_energy_per_delivery", "{:.2f}", "Energia / entregas esperadas."),
+    ("MDR (%)", "ps_mdr", "{:.2f}", "Publicações que chegaram a TODOS os assinantes elegíveis / publicações com ao menos um elegível × 100."),
+    ("Fora de ordem (%)", "ps_out_of_order_pct", "{:.2f}", "Entregas que chegaram depois de uma publicação mais nova do mesmo autor, no mesmo tópico, para o mesmo assinante / entregues × 100."),
+    ("Latência média (s)", "ps_lat_mean", "{:.2f}", "Da publicação à entrega, só publicações posteriores à assinatura (ao vivo). Inclui o tempo que a publicação de um satélite espera nele até acoplar e o que a entrega a um satélite espera até ele acoplar."),
+    ("Latência p95 (s)", "ps_lat_p95", "{:.2f}", "Percentil 95 da latência ao vivo."),
+    ("Latência p99 (s)", "ps_lat_p99", "{:.2f}", "Percentil 99 da latência ao vivo."),
+    ("Recuperação após falha, média (s)", "ps_rec_mean", "{:.2f}", "Entre as falhas recuperadas: do fim da falha até todo o Core ter de novo rota aos outros 8 nós, o PSPeer mais próximo de antes e as linhas de satélite iguais ao estado real (amostras a cada 0,1 s)."),
+    ("Recuperação após falha, máx. (s)", "ps_rec_max", "{:.2f}", "Pior caso da linha anterior."),
+    ("Falhas recuperadas", "ps_recovered", "{}", "Falhas recuperadas em até 10 s (de `Falhas de core`)."),
+    ("Falhas de core", "ps_failures", "{}", "Janelas em que um nó do Core ficou incomunicável (1 s a cada 30 s) e cuja medição coube na simulação (terminou até 10 s antes do fim ou recuperou antes)."),
+    ("Publicações", "ps_pubs", "{}", "Publicações criadas: Core (sorteio a cada PS_INTERVAL s) e satélites (uma por sensor encontrado em cada viagem)."),
+    ("Publicações de satélites", "ps_pubs_sat", "{}", "Das publicações, as de satélites (sensor par → T2, ímpar → T1)."),
+    ("Publicações com assinante elegível", "ps_pubs_with_subs", "{}", "Base do MDR: publicações com ao menos um assinante cujo filtro contém a região delas."),
+    ("Assinaturas", "ps_subs", "{}", "Assinaturas criadas (cada nó assina cada tópico no máximo uma vez)."),
+    ("Entregas esperadas", "ps_expected", "{}", "Pares (assinante, publicação): o assinante assina o tópico com filtro que contém a região da publicação (inclusive a fila anterior à assinatura); nunca ao próprio autor."),
+    ("Entregues", "ps_delivered", "{}", "Entregas esperadas que chegaram."),
+    ("Taxa por par (%)", "ps_pair_rate", "{:.2f}", "Entregues / esperadas × 100."),
+    ("Falsos positivos", "ps_false_pos", "{}", "Entregas que a regra não exigia (filtro ou tópico errado)."),
+    ("Duplicadas", "ps_duplicates", "{}", "Cópias extras da mesma publicação no mesmo assinante (descartadas por ele)."),
+    ("Entregas ao vivo", "ps_live", "{}", "Entregas de publicações posteriores à assinatura (base da latência)."),
+    ("Entregas da fila antiga", "ps_backlog", "{}", "Entregas de publicações anteriores à assinatura."),
+    ("Latência da fila antiga (s)", "ps_backlog_lat_mean", "{:.2f}", "Da assinatura à entrega, para a fila antiga (média)."),
+    ("Saltos médios", "ps_hops_mean", "{:.2f}", "Transmissões de rádio do autor ao PSPeer, entre PSPeers (sync) e do PSPeer ao assinante."),
+    ("Convergência de assinatura (s)", "ps_sub_conv_mean", "{:.3f}", "Da criação da assinatura até os 3 PSPeers a conhecerem (média). Inclui o tempo até o satélite acoplar."),
+    ("Assinaturas não sincronizadas", "ps_sub_unsynced", "{}", "Assinaturas que algum PSPeer nunca conheceu (sync perdido numa falha; sem retransmissão)."),
+    ("Vazão (entregas/min)", "ps_throughput", "{:.1f}", "Entregues por minuto simulado."),
+    ("Tx dados", "data_tx", "{}", "Pacotes de dados: pedidos ao PSPeer, entregas aos assinantes e dados do SwCore até os satélites."),
+    ("Tx controle", "control_tx", "{}", "Pacotes de controle: atualizações e pedidos da RT de satélites do SwCore, confirmações de upload e syncs entre PSPeers. Beacons de enlace (inclusive os que levam a RT do Core) ficam de fora, como no T1."),
 ]
 
 

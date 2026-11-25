@@ -68,6 +68,7 @@ de p — inclusive publicações anteriores à assinatura.
 """
 import json
 from bisect import insort
+from math import ceil
 from dataclasses import dataclass, field
 from random import Random
 from statistics import mean
@@ -81,6 +82,7 @@ from src.config import (
     SWCORE_RETRY_INTERVAL,
 )
 from src.routing import messages as m
+from src.routing.swcore_professor import RT_CHECK_TIMER, build_core_paths
 from src.routing.dock_protocol import MSG_DOCK_DELIVER
 from src.scenario import PSPEER_ANY, label, region, role, sensor_topic
 from src.sensor import MSG_SENSOR_DATA
@@ -94,16 +96,59 @@ def eligible(sub: dict, pub: dict) -> bool:
 
 
 # ── Métricas de pub/sub (gabarito global, só para medir) ──────────────────
+#
+# Definições (enunciado, "Métricas a coletar"):
+# - MDR: % das publicações que chegaram a TODOS os assinantes elegíveis (só conta
+#   publicação com ao menos um elegível). A taxa por par (assinante, publicação) vai
+#   à parte.
+# - Fora de ordem: entrega que chega depois de uma publicação mais nova do mesmo
+#   autor no mesmo tópico, para o mesmo assinante; % sobre as entregas (esperadas) que chegaram.
+# - Latência ponta a ponta: da publicação (inserção pelo publicador) à entrega, só
+#   quando a publicação é posterior à assinatura ("ao vivo"); a fila antiga (publicação
+#   anterior à assinatura) é medida da assinatura à entrega, em separado.
+# - Recuperação após falha: do fim da falha até, ao mesmo tempo, todos os nós do Core
+#   terem rota aos outros 8, o PSPeer mais próximo de antes (árvore inteira) e as linhas
+#   de satélite iguais ao estado real (onde cada satélite está acoplado). Amostrada na
+#   verificação de RT que o nó C1 já faz a cada 0,1 s (nenhum evento a mais: no GrADySim,
+#   um evento extra muda a ordem dos simultâneos); sem recuperação em RECOVERY_HORIZON s,
+#   conta como não recuperada. O estado das assinaturas tem métrica própria
+#   (convergência e assinaturas que nunca chegaram aos 3 PSPeers).
+# O amostrador só lê o estado dos nós (sem gravar caches); nenhuma decisão de protocolo usa isto.
+
+RECOVERY_HORIZON = 10.0   # s: depois disso, a falha conta como não recuperada
+
+
+def _tree_hops(source: int) -> Dict[int, int]:
+    """Saltos na árvore do Core (todos os nós vivos)."""
+    hops, frontier = {source: 0}, [source]
+    while frontier:
+        nxt = []
+        for node in frontier:
+            for peer in scenario.TREE_NEIGHBORS[node]:
+                if peer not in hops:
+                    hops[peer] = hops[node] + 1
+                    nxt.append(peer)
+        frontier = nxt
+    return hops
+
+
+def healthy_pspeer(core: int) -> int:
+    """PSPeer mais próximo com todos os nós vivos (mesmo desempate do SwCore: saltos, id)."""
+    hops = _tree_hops(core)
+    return min(scenario.PSPEERS, key=lambda p: (hops[p], p))
+
 
 @dataclass
 class PubSubMetrics:
     pubs: Dict[str, dict] = field(default_factory=dict)
     subs: Dict[Tuple[int, str], dict] = field(default_factory=dict)   # (assinante, tópico) → assinatura
     sub_known: Dict[str, Dict[int, float]] = field(default_factory=dict)  # assinatura → PSPeer → instante
-    # (assinante, pub) → latência, na ordem de chegada (dict preserva a ordem de inserção)
+    # (assinante, pub) → instante da chegada, na ordem de chegada (dict preserva a inserção)
     deliveries: Dict[Tuple[int, str], float] = field(default_factory=dict)
     hops: Dict[Tuple[int, str], int] = field(default_factory=dict)
     duplicates: int = 0
+    recovery: List[Optional[float]] = field(default_factory=list)  # por falha (None: não recuperou)
+    nodes: Dict[int, object] = field(default_factory=dict)          # só para o amostrador
 
     def reset(self) -> None:
         self.__init__()
@@ -120,8 +165,42 @@ class PubSubMetrics:
     def record_delivery(self, subscriber: int, pub: dict, now: float, hops: int) -> None:
         """1ª chegada (o cliente descarta e conta as cópias em `duplicates`)."""
         key = (subscriber, pub["id"])
-        self.deliveries[key] = now - pub["created_at"]
+        self.deliveries[key] = now
         self.hops[key] = hops
+
+    # ── Recuperação após falha ────────────────────────────────────────────
+
+    def routes_ok(self) -> bool:
+        """Rotas de entrega refeitas em todo o Core (ver definições acima)."""
+        core = [self.nodes[n] for n in scenario.CORE]
+        if any(node.radio_down for node in core):
+            return False
+        truth = {}
+        for sat in scenario.SATELLITES:
+            node = self.nodes[sat]
+            truth[sat] = node.hub if node._docked() else None
+        for node in core:
+            # mesmas contas de core_paths()/nearest_pspeer() do SwCore, sem gravar o cache do nó
+            paths = build_core_paths(node.node_id, {n: data.get("rt") or {} for n, data in node.fresh_neighbors().items()})
+            if len(paths) != len(scenario.CORE) - 1:
+                return False
+            peer = node.node_id if node.node_id in scenario.PSPEERS else \
+                min((len(paths[p]), p) for p in scenario.PSPEERS if p in paths)[1]
+            if peer != healthy_pspeer(node.node_id):
+                return False
+            for sat, real in truth.items():
+                row = node._rt.get(sat)
+                if row is None or row["state"] == "unreachable":
+                    seen = None
+                elif row["state"] == "direct":
+                    seen = node.node_id
+                else:
+                    seen = row["path"][-1] if row["path"] else row["next_hop"]
+                if seen != real:
+                    return False
+        return True
+
+    # ── Resumo ────────────────────────────────────────────────────────────
 
     def out_of_order(self, hits: Set[Tuple[int, str]]) -> int:
         """Entregas (esperadas) que chegaram depois de uma publicação mais nova do
@@ -141,39 +220,67 @@ class PubSubMetrics:
                 newest[pair] = pub["created_at"]
         return late
 
+    def eligible_by_pub(self) -> Dict[str, Set[int]]:
+        return {pub["id"]: {sub["subscriber"] for sub in self.subs.values() if eligible(sub, pub)}
+                for pub in self.pubs.values()}
+
     def expected(self) -> Set[Tuple[int, str]]:
-        return {(sub["subscriber"], pub["id"]) for pub in self.pubs.values()
-                for sub in self.subs.values() if eligible(sub, pub)}
+        return {(s, pid) for pid, subscribers in self.eligible_by_pub().items() for s in subscribers}
 
     def summary(self, duration: float) -> Dict[str, float]:
-        expected, delivered = self.expected(), set(self.deliveries)
-        hits = delivered & expected  # latência e saltos só das entregas esperadas (sem falsos positivos)
-        lat = sorted(self.deliveries[k] for k in hits)
+        nan = float("nan")
+        by_pub = self.eligible_by_pub()
+        expected = {(s, pid) for pid, subscribers in by_pub.items() for s in subscribers}
+        delivered = set(self.deliveries)
+        hits = delivered & expected  # latência e ordem só das entregas esperadas (sem falsos positivos)
+        with_subs = [pid for pid, subscribers in by_pub.items() if subscribers]
+        complete = [pid for pid in with_subs if all((s, pid) in delivered for s in by_pub[pid])]
+        live, backlog = [], []
+        for s, pid in hits:
+            pub, at = self.pubs[pid], self.deliveries[(s, pid)]
+            sub_at = self.subs[(s, pub["topic"])]["created_at"]
+            if pub["created_at"] >= sub_at:
+                live.append(at - pub["created_at"])
+            else:
+                backlog.append(at - sub_at)
+        live.sort()
         late = self.out_of_order(hits)
         created = {sub["id"]: sub["created_at"] for sub in self.subs.values()}
+        n_peers = len(scenario.PSPEERS)
         converged = [max(times.values()) - created[sid]
-                     for sid, times in self.sub_known.items() if len(times) == len(scenario.PSPEERS)]
+                     for sid, times in self.sub_known.items() if len(times) == n_peers]
+        recovered = [r for r in self.recovery if r is not None]
 
-        def pct(q: float) -> float:
-            return lat[min(len(lat) - 1, int(q * len(lat)))] if lat else float("nan")
+        def pct(q: float) -> float:  # nearest-rank
+            return live[max(0, ceil(q * len(live)) - 1)] if live else nan
 
         return {
             "ps_pubs": len(self.pubs),
+            "ps_pubs_sat": sum(1 for p in self.pubs.values() if scenario.role(p["publisher"]) == "satellite"),
             "ps_subs": len(self.subs),
+            "ps_pubs_with_subs": len(with_subs),
+            "ps_mdr": 100.0 * len(complete) / len(with_subs) if with_subs else nan,
             "ps_expected": len(expected),
             "ps_delivered": len(hits),
-            "ps_mdr": 100.0 * len(hits) / len(expected) if expected else float("nan"),
+            "ps_pair_rate": 100.0 * len(hits) / len(expected) if expected else nan,
             "ps_false_pos": len(delivered - expected),
-            "ps_false_neg": len(expected - delivered),
             "ps_duplicates": self.duplicates,
             "ps_out_of_order": late,
-            "ps_out_of_order_pct": 100.0 * late / len(hits) if hits else float("nan"),
-            "ps_throughput": len(hits) / (duration / 60.0),
-            "ps_lat_mean": mean(lat) if lat else float("nan"),
+            "ps_out_of_order_pct": 100.0 * late / len(hits) if hits else nan,
+            "ps_lat_mean": mean(live) if live else nan,
             "ps_lat_p95": pct(0.95),
             "ps_lat_p99": pct(0.99),
-            "ps_hops_mean": mean(self.hops[k] for k in hits) if hits else float("nan"),
-            "ps_sub_conv_mean": mean(converged) if converged else float("nan"),
+            "ps_live": len(live),
+            "ps_backlog_lat_mean": mean(backlog) if backlog else nan,
+            "ps_backlog": len(backlog),
+            "ps_hops_mean": mean(self.hops[k] for k in hits) if hits else nan,
+            "ps_failures": len(self.recovery),
+            "ps_recovered": len(recovered),
+            "ps_rec_mean": mean(recovered) if recovered else nan,
+            "ps_rec_max": max(recovered) if recovered else nan,
+            "ps_sub_conv_mean": mean(converged) if converged else nan,
+            "ps_sub_unsynced": sum(1 for sid in created if len(self.sub_known.get(sid, ())) < n_peers),
+            "ps_throughput": len(hits) / (duration / 60.0),
         }
 
 
@@ -219,6 +326,7 @@ class PubSubClient:
         self._ps_count = 0
         self.ps_subs: Dict[str, dict] = {}                         # tópico → minha assinatura
         self.ps_read: Dict[str, Set[str]] = {t: set() for t in PS_TOPICS}  # tópico → publicações lidas
+        PS_METRICS.nodes[self.node_id] = self  # só para as métricas (amostrador de recuperação)
         self.provider.schedule_timer(PS_TIMER, self._rng.uniform(0, PS_INTERVAL))
 
     def _ps_id(self, kind: str) -> str:
@@ -296,6 +404,21 @@ class PubSubCore(PubSubClient):
         self._ps_sync_seq = 0
         self._ps_synced: Set[str] = set()      # syncs já repassados (cada um, uma vez)
         self.provider.schedule_timer(PS_RETRY_TIMER, self.provider.current_time() + SWCORE_RETRY_INTERVAL)
+        self._rec_k = 1  # métrica: próxima falha a medir (só o amostrador, C1, usa)
+
+    def _rec_end(self) -> float:
+        return config.FAILURE_OFFSET + self._rec_k * config.FAILURE_PERIOD + config.FAILURE_DURATION
+
+    def _sample_recovery(self) -> None:
+        """Métrica: após cada falha, amostra até as rotas de entrega estarem refeitas."""
+        now = self.provider.current_time()
+        end = self._rec_end()
+        if now < end - 1e-6:
+            return
+        ok = PS_METRICS.routes_ok()
+        if ok or now - end >= RECOVERY_HORIZON - 1e-6:
+            PS_METRICS.recovery.append(max(0.0, now - end) if ok else None)
+            self._rec_k += 1
 
     # ── Cliente ───────────────────────────────────────────────────────────
 
@@ -467,6 +590,10 @@ class PubSubCore(PubSubClient):
         self._route(entry)
 
     def handle_timer(self, timer: str) -> None:
+        if timer == RT_CHECK_TIMER and config.CORE_FAILURE and self.node_id == scenario.CORE[0]:
+            super().handle_timer(timer)  # o SwCore trata a verificação; depois, só leitura
+            self._sample_recovery()
+            return
         if timer == PS_RETRY_TIMER:
             self._ps_drain()
             self.provider.schedule_timer(PS_RETRY_TIMER, self.provider.current_time() + SWCORE_RETRY_INTERVAL)
