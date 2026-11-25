@@ -17,11 +17,12 @@ from src.config import (
     VIZ_DURATION, VIZ_SPEEDUP,
 )
 from src import eventlog
-from src.metrics import METRICS
+from src.metrics import METRICS, MOVING_EPS
+from src.config import E_RX, E_TX
 from src.pubsub import PS_METRICS
 from src.nodes import make_node
 from src.pacing import PacingHandler
-from src.scenario import ALL_NODES, DOCK_RADIUS, SENSORS, initial_position, role
+from src.scenario import ALL_NODES, DOCK_RADIUS, SENSORS, initial_position, label, role
 from src.sensor import make_sensor
 
 
@@ -80,6 +81,7 @@ def run(protocol: str, viz: bool) -> Dict[str, float]:
         summary.update(METRICS.recovery(duration))
         if protocol == "pubsub":
             summary.update(PS_METRICS.summary(duration))
+            summary["energy_nodes"] = METRICS.energy_by_node()
         eventlog.close_log(_ps_table(summary) if protocol == "pubsub"
                           else _table([{"protocol": protocol, **summary}]))
     print(f"\n>>> Log de eventos salvo em: {log_path}\n")
@@ -187,6 +189,62 @@ def print_pubsub(summary: Dict[str, float]) -> None:
     print(_ps_table(summary))
 
 
+def _br(x: float) -> str:
+    return f"{x:g}".replace(".", ",")
+
+
+ENERGY_CRITERIA = f"""Critério de medição (extra; o enunciado do T2 não pede energia):
+
+- **Comunicação:** cada pacote transmitido pelo nó conta {_br(E_TX)} e cada pacote recebido
+  conta {_br(E_RX)} (`E_TX`, `E_RX` em `src/config.py`); um broadcast conta uma recepção por
+  ouvinte, e um unicast só chega ao destinatário (o GrADySim não entrega a terceiros ao
+  alcance). O nó em falha não transmite nem recebe. Unidade relativa (não joules),
+  a mesma do T1. Classes de pacote:
+  - **protocolo:** Pub/Sub e SwCore (pedidos, entregas, syncs, RT de satélites,
+    confirmações de upload);
+  - **enlace:** beacons periódicos e disparados por mudança de rota, e handshake de
+    acoplamento (`link*`); no SwCore do professor, os beacons do Core levam a RT do Core;
+  - **coleta:** leituras entregues pelos sensores aos satélites (`sensor_data`).
+- **Voo:** distância = soma dos deslocamentos entre telemetrias consecutivas (a cada
+  {_br(MOBILITY_UPDATE)} s); tempo em movimento = soma dos intervalos com deslocamento
+  > {_br(MOVING_EPS * 1000)} mm. Dados brutos, sem coeficientes físicos (o gasto por metro
+  depende do drone)."""
+
+ENERGY_COLUMNS = [  # (título, chave, formato)
+    ("E protocolo", "e_protocolo", "{:.0f}"), ("E enlace", "e_enlace", "{:.0f}"),
+    ("E coleta", "e_coleta", "{:.0f}"), ("E total", "e_total", "{:.0f}"),
+    ("Tx / Rx protocolo", None, None), ("Distância (m)", "dist", "{:.0f}"),
+    ("Em movimento (s)", "moving", "{:.0f}"),
+]
+
+
+def _energy_cells(row: Dict[str, float]) -> List[str]:
+    cells = []
+    for _, key, fmt in ENERGY_COLUMNS:
+        cells.append(f"{row['tx_protocolo']:.0f} / {row['rx_protocolo']:.0f}" if key is None else fmt.format(row[key]))
+    return cells
+
+
+def _energy_tables(rows: List[Dict[str, float]]) -> str:
+    header = "| {} | " + " | ".join(title for title, _, _ in ENERGY_COLUMNS) + " |"
+    rule = "|" + "|".join(" :---: " for _ in range(len(ENERGY_COLUMNS) + 1)) + "|"
+    keys = ["tx_protocolo", "rx_protocolo"] + [key for _, key, _ in ENERGY_COLUMNS if key]
+    roles = ["PSPeer", "Core (não PSPeer)", "Satélite", "Sensor"]
+    lines = ["## Energia (extra, não exigida pelo enunciado)", "", ENERGY_CRITERIA, "",
+             "### Por papel (média por nó)", "", header.format("Papel (nós)"), rule]
+    for role_name in roles:
+        group = [r for r in rows if r["role"] == role_name]
+        if group:
+            avg = {k: sum(r[k] for r in group) / len(group) for k in keys}
+            lines.append(f"| {role_name} ({len(group)}) | " + " | ".join(_energy_cells(avg)) + " |")
+    lines += ["", "### Por nó", "", header.format("Nó"), rule]
+    for r in rows:
+        lines.append(f"| {label(r['node'])} ({r['role']}) | " + " | ".join(_energy_cells(r)) + " |")
+    return "\n".join(lines)
+
+
 def write_pubsub_to_file(summary: Dict[str, float], filename) -> None:
     with open(filename, "w", encoding="utf-8") as f:
         f.write("# Resultados do Pub/Sub sobre o SwCore do professor\n\n" + _ps_table(summary) + "\n")
+        if summary.get("energy_nodes"):
+            f.write("\n" + _energy_tables(summary["energy_nodes"]) + "\n")

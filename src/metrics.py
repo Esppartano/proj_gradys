@@ -21,13 +21,42 @@ Definições
 - Energia: E_TX·(tx dados + tx controle) + E_RX·rx. A energia de movimento é
   igual em todos os protocolos (mesma mobilidade) e não entra na comparação.
 """
+import json
 from bisect import bisect_left
 from dataclasses import dataclass, field
 from statistics import mean, median
 from typing import Dict, List, Tuple
 
+from src import scenario
 from src.config import E_RX, E_TX
 from src.scenario import TREE_NEIGHBORS, failure_windows
+
+# ── Energia por nó (extra do T2; não entra nas métricas do enunciado) ──────
+# Critério de medição:
+# - Comunicação: todo pacote que o nó transmite conta E_TX e todo pacote que ele
+#   recebe conta E_RX (um broadcast conta uma recepção por ouvinte). O nó em falha
+#   não transmite nem recebe, então não conta. Os pacotes são separados em classes:
+#     enlace    = beacons e handshake de acoplamento (msg_type "link*"); no SwCore do
+#                 professor, os beacons do Core também levam a RT do Core;
+#     coleta    = leituras dos sensores entregues aos satélites ("sensor_data");
+#     protocolo = todo o resto (Pub/Sub e SwCore: pedidos, entregas, syncs, RT de
+#                 satélites, confirmações de upload).
+#   Unidade relativa (a mesma do T1), não joules.
+# - Voo: distância percorrida = soma dos deslocamentos entre telemetrias consecutivas
+#   (a cada MOBILITY_UPDATE s); tempo em movimento = soma dos intervalos em que o nó
+#   se deslocou mais que MOVING_EPS. Dados brutos, sem coeficientes físicos.
+PACKET_CLASSES = ("protocolo", "enlace", "coleta")
+MOVING_EPS = 1e-3  # m
+
+
+def packet_class(message: str) -> str:
+    try:
+        kind = json.loads(message).get("msg_type") or ""
+    except (json.JSONDecodeError, AttributeError):
+        return "protocolo"
+    if kind.startswith("link"):
+        return "enlace"
+    return "coleta" if kind == "sensor_data" else "protocolo"
 
 
 @dataclass
@@ -52,6 +81,47 @@ class RoutingMetrics:
     acks: List[Tuple[float, int, int]] = field(default_factory=list)   # HOP_ACK que confirmou um dado
     # SwCore do professor: (nó, instante, relays de que as rotas do nó dependem)
     rt_snapshots: List[Tuple[int, float, frozenset]] = field(default_factory=list)
+    # Energia por nó (ver critério no topo): nó → classe → pacotes; voo por nó
+    node_tx: Dict[int, Dict[str, int]] = field(default_factory=dict)
+    node_rx: Dict[int, Dict[str, int]] = field(default_factory=dict)
+    node_dist: Dict[int, float] = field(default_factory=dict)
+    node_moving: Dict[int, float] = field(default_factory=dict)
+
+    def count_tx(self, node: int, message: str) -> None:
+        per = self.node_tx.setdefault(node, {})
+        kind = packet_class(message)
+        per[kind] = per.get(kind, 0) + 1
+
+    def count_rx(self, node: int, message: str) -> None:
+        per = self.node_rx.setdefault(node, {})
+        kind = packet_class(message)
+        per[kind] = per.get(kind, 0) + 1
+
+    def record_motion(self, node: int, step: float, interval: float) -> None:
+        self.node_dist[node] = self.node_dist.get(node, 0.0) + step
+        if step > MOVING_EPS:
+            self.node_moving[node] = self.node_moving.get(node, 0.0) + interval
+
+    def register_node(self, node: int) -> None:
+        """Garante uma linha para o nó mesmo que ele não transmita, receba nem se mova."""
+        self.node_dist.setdefault(node, 0.0)
+
+    def energy_by_node(self) -> List[Dict[str, object]]:
+        """Uma linha por nó que apareceu na simulação (ver critério no topo)."""
+        nodes = sorted(set(self.node_tx) | set(self.node_rx) | set(self.node_dist))
+        rows = []
+        for node in nodes:
+            tx, rx = self.node_tx.get(node, {}), self.node_rx.get(node, {})
+            row = {"node": node, "role": energy_role(node)}
+            for kind in PACKET_CLASSES:
+                row[f"tx_{kind}"] = tx.get(kind, 0)
+                row[f"rx_{kind}"] = rx.get(kind, 0)
+                row[f"e_{kind}"] = E_TX * tx.get(kind, 0) + E_RX * rx.get(kind, 0)
+            row["e_total"] = sum(row[f"e_{kind}"] for kind in PACKET_CLASSES)
+            row["dist"] = self.node_dist.get(node, 0.0)
+            row["moving"] = self.node_moving.get(node, 0.0)
+            rows.append(row)
+        return rows
 
     def reset(self) -> None:
         self.__init__()
@@ -132,3 +202,10 @@ METRICS = RoutingMetrics()
 def record_rt_snapshot(node: int, time: float, uses: frozenset) -> None:
     """Chamado pelo SwCore do professor quando mudam os relays usados pelas rotas de um nó."""
     METRICS.rt_snapshots.append((node, time, uses))
+
+
+def energy_role(node: int) -> str:
+    """Papel para agrupar a energia: PSPeer, demais nós do Core, satélite ou sensor."""
+    if node in scenario.PSPEERS:
+        return "PSPeer"
+    return {"core": "Core (não PSPeer)", "satellite": "Satélite", "sensor": "Sensor"}.get(scenario.role(node), "?")

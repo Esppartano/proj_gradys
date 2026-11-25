@@ -186,7 +186,8 @@ publicações anteriores à assinatura (fila desde a criação).
 | **Latência ponta a ponta** | Da publicação à entrega (média, p95 e p99), só para publicações **posteriores** à assinatura. A fila antiga mediria a idade do tópico, não a notificação; ela é medida da assinatura à entrega, à parte. |
 | **Recuperação após falha** | Do fim da falha até, ao mesmo tempo, todo o Core ter rota aos outros 8 nós, o mesmo PSPeer mais próximo de antes e as linhas de satélite iguais ao estado real. Amostrada na verificação de RT que C1 já faz a cada 0,1 s (nenhum evento a mais; um evento extra muda a ordem dos simultâneos no GrADySim). Acima de 10 s, conta como não recuperada. O estado das assinaturas tem métricas próprias: convergência e assinaturas nunca sincronizadas. |
 
-Energia não é pedida no T2 e saiu da tabela.
+Energia não é pedida no T2: fica fora das métricas do enunciado e é medida à
+parte, por nó (seção 7.1).
 
 ---
 
@@ -233,6 +234,42 @@ outros assinantes elegíveis a recebem pela fila antiga, quando assinam:
 - S2 assinou já acoplado (521,5 s): a assinatura disparou uma nova solicitação,
   e a resposta chegou no mesmo acoplamento (521,6 s);
 - S1 e S4 assinaram longe do Core e a receberam no acoplamento seguinte.
+
+### 7.1 Energia (extra, não exigida pelo enunciado)
+
+Medida para uso futuro (gestão de energia do enxame), sem entrar nas métricas
+do enunciado. Está em `results_pubsub.md`, por papel e por nó.
+
+**Critério de medição** (`src/metrics.py`):
+
+| Gasto | Como é medido | Unidade |
+|---|---|---|
+| **Comunicação** | Cada pacote transmitido pelo nó conta 1 (`E_TX`) e cada pacote recebido conta 0,5 (`E_RX`). Um broadcast conta uma recepção por ouvinte; um unicast só chega ao destinatário (o GrADySim não o entrega a terceiros ao alcance). O nó em falha não transmite nem recebe. A contagem é feita na entrada e na saída do rádio de cada nó, antes de qualquer protocolo, e não cria eventos. | Relativa (a mesma do T1), não joules |
+| ↳ protocolo | Pub/Sub e SwCore: pedidos, entregas, syncs, RT de satélites, confirmações de upload | |
+| ↳ enlace | Beacons (periódicos e disparados por mudança de rota) e handshake de acoplamento (`link*`). No SwCore do professor, os beacons do Core levam a RT do Core. No T1, ficavam fora da energia. | |
+| ↳ coleta | Leituras entregues pelos sensores aos satélites (`sensor_data`) | |
+| **Voo** | Distância = soma dos deslocamentos entre telemetrias consecutivas (a cada 0,05 s). Tempo em movimento = soma dos intervalos com deslocamento > 1 mm. Sem coeficientes físicos, porque o gasto por metro depende do drone. | m, s |
+
+**Por papel** (média por nó, 60 min, com falha):
+
+| Papel (nós) | E protocolo | E enlace | E coleta | E total | Tx / Rx protocolo | Distância | Em movimento |
+|---|---|---|---|---|---|---|---|
+| PSPeer (3) | 7122 | 38305 | 0 | 45427 | 5119 / 4006 | 15,8 km | 3596 s |
+| Core, não PSPeer (6) | 4988 | 35000 | 0 | 39988 | 2458 / 5062 | 15,5 km | 3595 s |
+| Satélite (4) | 436 | 21982 | 900 | 23319 | 225 / 422 | 9,6 km | 1914 s |
+| Sensor (12) | 1 | 7872 | 600 | 8473 | 0 / 1 | 0 | 0 |
+
+- **O enlace domina a comunicação:** 81–91% da energia de rádio de cada nó do Core
+  é de enlace, quase toda dos beacons a cada 0,2 s, que levam a RT do Core (o
+  resto são beacons disparados por mudança de rota, beacons de satélites ouvidos
+  pelas pontas e o handshake de acoplamento).
+- **Ser PSPeer custa:**
+  - **Energia de protocolo:** cerca de 43% a mais que nos demais nós do Core (7122 contra 4988).
+  - **Energia total:** cerca de 14% a mais (45427 contra 39988).
+  - **Distribuição do custo:** o PSPeer transmite mais (respostas, entregas e syncs: 5119 transmissões contra 2458), enquanto os nós internos de repasse (C2, C3, C6, C7) recebem mais, porque ouvem os dois lados do sync. As pontas C5 e C9 são os nós do Core que menos gastam.
+- **Voo:**
+  - **Core:** está sempre em movimento, girando. A distância cresce com o raio de rotação: C2 e C6 andam 8,1 km; as pontas C5 e C9, 25,9 km.
+  - **Satélites:** passam 53% do tempo em movimento (o resto, esperando ou acoplados) e percorrem cerca de 9,6 km.
 
 ---
 
@@ -332,7 +369,8 @@ python -m unittest tests.test_pubsub -v
 | `src/sensor.py` | Sensores par/ímpar |
 | `src/scenario.py` | PSPeers, sensores, falha de core, região de cada nó |
 | `src/node.py` | Ciclo dos satélites (começando afastados no T2), corte do rádio na falha, aviso de volta |
-| `src/motor.py`, `main.py` | Opção 6 do menu e tabela `results_pubsub.md` |
+| `src/motor.py`, `main.py` | Opção 6 do menu e tabela `results_pubsub.md` (com a seção de energia) |
+| `src/metrics.py` | Energia por nó: contagem por classe de pacote e voo (critério na seção 7.1) |
 | `tests/test_pubsub.py` | TF01–TF06 |
 
 ## 13. Referências

@@ -96,8 +96,9 @@ necessárias pelo menos 2 voltas (3 no T2).
 - **`results.md`**: tabela comparativa com a legenda de cada coluna. É gerada
   pelo benchmark (opção 5).
 - **`results_pubsub.md`**: métricas do Pub/Sub (MDR, fora de ordem, latência
-  p95/p99, recuperação após falha…) com a descrição de cada uma. É gerada pela
-  opção 6 no modo rápido.
+  p95/p99, recuperação após falha…) com a descrição de cada uma, e uma seção
+  extra de energia por papel e por nó (comunicação por classe de pacote e voo,
+  com o critério de medição). É gerada pela opção 6 no modo rápido.
 - **`logs/<protocolo>.log`**: eventos de cada execução (criação, repasse,
   entrega, conexão dos satélites…), um por linha. Fica fora do git.
 

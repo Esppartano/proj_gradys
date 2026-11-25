@@ -18,6 +18,7 @@ from gradysim.protocol.messages.communication import SendMessageCommand
 from gradysim.protocol.messages.telemetry import Telemetry
 
 from src.config import SENSOR_READING_INTERVAL
+from src.metrics import METRICS
 from src.scenario import label
 
 MSG_SENSOR_DATA = "sensor_data"
@@ -30,6 +31,7 @@ class SensorNode(IProtocol):
         self.node_id = self.provider.get_id()
         self.readings = 1        # leituras guardadas, ainda não coletadas (já começa com uma)
         self.collected = 0       # leituras entregues a satélites (só para o HUD)
+        METRICS.register_node(self.node_id)  # aparece na tabela de energia mesmo sem tráfego
         self.provider.schedule_timer(READING_TIMER, SENSOR_READING_INTERVAL)
 
     def handle_timer(self, timer: str) -> None:
@@ -38,15 +40,16 @@ class SensorNode(IProtocol):
             self.provider.schedule_timer(READING_TIMER, self.provider.current_time() + SENSOR_READING_INTERVAL)
 
     def handle_packet(self, message: str) -> None:
+        METRICS.count_rx(self.node_id, message)  # energia por nó: o rádio ouve tudo ao alcance
         try:
             raw = json.loads(message)
         except json.JSONDecodeError:
             return
         if raw.get("msg_type") != "link" or raw.get("role") != "satellite" or not self.readings:
             return
-        self.provider.send_communication_command(SendMessageCommand(json.dumps({
-            "msg_type": MSG_SENSOR_DATA, "sender_id": self.node_id, "readings": self.readings,
-        }), raw["id"]))
+        message = json.dumps({"msg_type": MSG_SENSOR_DATA, "sender_id": self.node_id, "readings": self.readings})
+        self.provider.send_communication_command(SendMessageCommand(message, raw["id"]))
+        METRICS.count_tx(self.node_id, message)
         self.collected += self.readings
         self.readings = 0
         self._on_collected()

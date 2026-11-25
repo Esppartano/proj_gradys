@@ -36,6 +36,7 @@ from src.config import (
     LINK_TIMEOUT, ROTATION_OMEGA, SATELLITE_PAIRS, SATELLITE_SPEED,
 )
 from src import config, eventlog, scenario as sc
+from src.metrics import METRICS
 
 CORE_STEP = 0.2               # s entre comandos de mobilidade do Core
 SATELLITE_STEP = 0.2          # s entre decisões de mobilidade do satélite
@@ -89,9 +90,22 @@ class SwarmNode(IProtocol):
         def send_unless_down(command) -> None:
             if not self.radio_down:
                 send(command)
+                METRICS.count_tx(self.node_id, command.message)  # energia por nó (só contagem)
                 self._on_transmit(command)
 
         self.provider.send_communication_command = send_unless_down
+
+        # Toda recepção também passa por aqui (antes de qualquer mixin, inclusive os que
+        # tratam o pacote sem chegar a SwarmNode.handle_packet): só para a energia por nó.
+        receive = self.handle_packet
+
+        def handle_packet_counted(message: str) -> None:
+            if not self.radio_down:
+                METRICS.count_rx(self.node_id, message)
+            receive(message)
+
+        self.handle_packet = handle_packet_counted
+        self._last_telemetry = 0.0
 
         if self.role == "satellite":
             self.flight = "voltando" if config.T2_SCENARIO else "espera"  # T2: começa afastado
@@ -365,7 +379,11 @@ class SwarmNode(IProtocol):
                 self.provider.schedule_timer("move", now + SATELLITE_STEP)
 
     def handle_telemetry(self, telemetry: Telemetry) -> None:
-        self._position = tuple(telemetry.current_position)
+        position = tuple(telemetry.current_position)
+        now = self.provider.current_time()
+        METRICS.record_motion(self.node_id, dist(position, self._position), now - self._last_telemetry)
+        self._last_telemetry = now
+        self._position = position
 
     def handle_packet(self, message: str) -> None:
         if self.radio_down:

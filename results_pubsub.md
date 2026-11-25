@@ -29,3 +29,61 @@
 | Vazão (entregas/min) | 367.6 | Entregues por minuto simulado. |
 | Tx dados | 9811 | Pacotes de dados: pedidos ao PSPeer, entregas aos assinantes e dados do SwCore até os satélites. |
 | Tx controle | 21190 | Pacotes de controle: atualizações e pedidos da RT de satélites do SwCore, confirmações de upload e syncs entre PSPeers. Beacons de enlace (inclusive os que levam a RT do Core) ficam de fora, como no T1. |
+
+## Energia (extra, não exigida pelo enunciado)
+
+Critério de medição (extra; o enunciado do T2 não pede energia):
+
+- **Comunicação:** cada pacote transmitido pelo nó conta 1 e cada pacote recebido
+  conta 0,5 (`E_TX`, `E_RX` em `src/config.py`); um broadcast conta uma recepção por
+  ouvinte, e um unicast só chega ao destinatário (o GrADySim não entrega a terceiros ao
+  alcance). O nó em falha não transmite nem recebe. Unidade relativa (não joules),
+  a mesma do T1. Classes de pacote:
+  - **protocolo:** Pub/Sub e SwCore (pedidos, entregas, syncs, RT de satélites,
+    confirmações de upload);
+  - **enlace:** beacons periódicos e disparados por mudança de rota, e handshake de
+    acoplamento (`link*`); no SwCore do professor, os beacons do Core levam a RT do Core;
+  - **coleta:** leituras entregues pelos sensores aos satélites (`sensor_data`).
+- **Voo:** distância = soma dos deslocamentos entre telemetrias consecutivas (a cada
+  0,05 s); tempo em movimento = soma dos intervalos com deslocamento
+  > 1 mm. Dados brutos, sem coeficientes físicos (o gasto por metro
+  depende do drone).
+
+### Por papel (média por nó)
+
+| Papel (nós) | E protocolo | E enlace | E coleta | E total | Tx / Rx protocolo | Distância (m) | Em movimento (s) |
+| :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| PSPeer (3) | 7122 | 38305 | 0 | 45427 | 5119 / 4006 | 15757 | 3596 |
+| Core (não PSPeer) (6) | 4988 | 35000 | 0 | 39988 | 2458 / 5062 | 15464 | 3595 |
+| Satélite (4) | 436 | 21982 | 900 | 23319 | 225 / 422 | 9568 | 1914 |
+| Sensor (12) | 1 | 7872 | 600 | 8473 | 0 / 1 | 0 | 0 |
+
+### Por nó
+
+| Nó | E protocolo | E enlace | E coleta | E total | Tx / Rx protocolo | Distância (m) | Em movimento (s) |
+| :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| C1 (PSPeer) | 8603 | 36444 | 0 | 45048 | 6198 / 4810 | 9610 | 3600 |
+| C2 (Core (não PSPeer)) | 5988 | 36455 | 0 | 42442 | 2994 / 5987 | 8130 | 3596 |
+| C3 (Core (não PSPeer)) | 5540 | 36502 | 0 | 42041 | 2943 / 5193 | 12386 | 3595 |
+| C4 (PSPeer) | 6014 | 39784 | 0 | 45797 | 4248 / 3531 | 18824 | 3596 |
+| C5 (Core (não PSPeer)) | 3092 | 32140 | 0 | 35232 | 1366 / 3451 | 25866 | 3595 |
+| C6 (Core (não PSPeer)) | 6192 | 36418 | 0 | 42611 | 2978 / 6429 | 8130 | 3596 |
+| C7 (Core (não PSPeer)) | 5788 | 36366 | 0 | 42154 | 3028 / 5519 | 12391 | 3594 |
+| C8 (PSPeer) | 6749 | 38686 | 0 | 45436 | 4910 / 3678 | 18835 | 3593 |
+| C9 (Core (não PSPeer)) | 3331 | 32116 | 0 | 35446 | 1436 / 3790 | 25879 | 3592 |
+| S1 (Satélite) | 418 | 22052 | 900 | 23370 | 217 / 403 | 9532 | 1906 |
+| S2 (Satélite) | 444 | 21916 | 901 | 23262 | 234 / 421 | 9612 | 1922 |
+| S3 (Satélite) | 429 | 22046 | 900 | 23374 | 213 / 432 | 9542 | 1908 |
+| S4 (Satélite) | 453 | 21916 | 900 | 23270 | 236 / 434 | 9587 | 1917 |
+| X13 (Sensor) | 2 | 10426 | 720 | 11148 | 0 / 4 | 0 | 0 |
+| X14 (Sensor) | 0 | 9546 | 720 | 10266 | 0 / 0 | 0 | 0 |
+| X15 (Sensor) | 0 | 3705 | 359 | 4064 | 0 / 0 | 0 | 0 |
+| X16 (Sensor) | 0 | 10317 | 720 | 11037 | 0 / 0 | 0 | 0 |
+| X17 (Sensor) | 0 | 9540 | 720 | 10260 | 0 / 0 | 0 | 0 |
+| X18 (Sensor) | 0 | 3736 | 362 | 4098 | 0 / 0 | 0 | 0 |
+| X19 (Sensor) | 6 | 10414 | 720 | 11140 | 0 / 11 | 0 | 0 |
+| X20 (Sensor) | 0 | 9546 | 720 | 10266 | 0 / 0 | 0 | 0 |
+| X21 (Sensor) | 0 | 3678 | 359 | 4037 | 0 / 0 | 0 | 0 |
+| X22 (Sensor) | 0 | 10316 | 720 | 11036 | 0 / 0 | 0 | 0 |
+| X23 (Sensor) | 0 | 9540 | 720 | 10260 | 0 / 0 | 0 | 0 |
+| X24 (Sensor) | 0 | 3700 | 361 | 4062 | 0 / 0 | 0 | 0 |
