@@ -345,19 +345,22 @@ class PubSubClient:
         if self.role == "core" and self._rng.random() < PS_PUBLISH_PROB:
             self._publish(self._rng.choice(PS_TOPICS))
 
-    def _subscribe(self, topic: str) -> None:
-        regions = sorted(self._rng.sample(PS_REGIONS, self._rng.randint(1, len(PS_REGIONS))))
+    def _subscribe(self, topic: str, regions: Optional[List[str]] = None) -> dict:
+        """Assina `topic`; sem `regions`, o filtro é sorteado (os testes passam um fixo)."""
+        if regions is None:
+            regions = sorted(self._rng.sample(PS_REGIONS, self._rng.randint(1, len(PS_REGIONS))))
         sub = {"id": self._ps_id("s"), "subscriber": self.node_id, "topic": topic, "filter": regions,
                "created_at": self.provider.current_time()}
         self.ps_subs[topic] = sub
         PS_METRICS.record_sub(sub)
         self._note("created", f"Assinou {topic} filtro {{{','.join(regions)}}}")
         self._on_subscribed(sub)
+        return sub
 
     def _on_subscribed(self, sub: dict) -> None:
         raise NotImplementedError
 
-    def _publish(self, topic: str, source: Optional[int] = None) -> None:
+    def _publish(self, topic: str, source: Optional[int] = None) -> dict:
         pub = {"id": self._ps_id("p"), "topic": topic, "region": self.region, "publisher": self.node_id,
                "created_at": self.provider.current_time()}
         if source is not None:
@@ -366,6 +369,7 @@ class PubSubClient:
         origin = f" (sensor {label(source)})" if source is not None else ""
         self._note("created", f"Publicou {pub['id']} em {topic}{origin}", "created")
         self._ps_to_pspeer({"kind": "pub", "pubs": [pub]})
+        return pub
 
     def _ps_deliver(self, pubs: List[dict], hops: int) -> None:
         """Chegada de publicações (push do PSPeer de casa ou resposta a uma solicitação)."""
